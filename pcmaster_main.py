@@ -13,7 +13,7 @@ from PyQt5.QtCore import QSharedMemory
 
 # 최상위 관리 모듈 로드 (윈도우 로드는 지연 가능하도록 아래에서 하거나 그대로 둠)
 import db_manager
-import plc_worker
+import pcmaster_worker
 
 def center_window(widget):
     """위젯을 화면 중앙으로 이동시키는 함수"""
@@ -35,7 +35,7 @@ class InitWorker(QThread):
         
         # 2단계: PLC 통신 스레드 기동
         self.progress_signal.emit("🔌 PLC 통신 엔진 시작 중...")
-        t = threading.Thread(target=plc_worker.serial_receive_thread, daemon=True)
+        t = threading.Thread(target=pcmaster_worker.serial_receive_thread, daemon=True)
         t.start()
         time.sleep(0.3)
         
@@ -107,9 +107,9 @@ if __name__ == "__main__":
         center_window(win)
 
         # =================================================================
-        # ⭐ [누락된 부분 추가] plc_worker의 시그널을 화면의 상태 변경 함수와 연결합니다!
-        import plc_worker
-        plc_worker.comm_signal.status_changed.connect(win.update_rs485_status)
+        # ⭐ [누락된 부분 추가] pcmaster_worker의 시그널을 화면의 상태 변경 함수와 연결합니다!
+        import pcmaster_worker
+        pcmaster_worker.comm_signal.status_changed.connect(win.update_rs485_status)
         # =================================================================
         
         # 최상단 고정으로 메인 화면 표시

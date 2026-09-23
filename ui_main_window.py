@@ -19,7 +19,7 @@ import excel_report
 import mariadb_backup
 from ui_dialogs import ManualMeterInputDialog, FieldInspectionDialog 
 from ui_ac_settings import ACSettingsDialog
-import plc_worker # 통신 스레드가 있는 파일을 임포트합니다.
+import pcmaster_worker # 통신 스레드가 있는 파일을 임포트합니다.
 
 class SCADAWindow(QMainWindow):
     def __init__(self):

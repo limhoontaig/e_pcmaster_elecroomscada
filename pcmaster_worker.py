@@ -1,14 +1,29 @@
-# plc_worker.py
-import serial
-import struct
+# pcmaster_worker.py
 import time
-import configparser
 import os
+import struct
+import configparser
 from datetime import datetime
 from PyQt5.QtCore import QObject, pyqtSignal
 
+from pymodbus.client import ModbusSerialClient 
+
 from db_manager import DATA_LABELS, get_db_raw_connection
-from ac_controller import ac_manager  # 💡 분리된 에어컨 매니저 호출
+from ac_controller import ac_manager 
+
+# --- pymodbus 버전 충돌 방지용 만능 호환 함수 ---
+def safe_modbus_call(func, address, count=None, value=None, slave_id=1):
+    for key in ["slave", "unit", "slave_id", "device_id"]:
+        kwargs = {key: slave_id}
+        if count is not None: kwargs['count'] = count
+        if value is not None: kwargs['value'] = value
+        try:
+            return func(address=address, **kwargs)
+        except TypeError as e:
+            if "unexpected keyword argument" in str(e):
+                continue
+            raise e
+    return None
 
 config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
 
@@ -21,118 +36,162 @@ def get_com_port():
 
 COM_PORT = get_com_port()
 BAUD_RATE = 19200         
-MY_SLAVE_ID = 5           
-NUM_WORDS = 52 
 
 class CommSignal(QObject):
     status_changed = pyqtSignal(bool)
 
 comm_signal = CommSignal()
+last_db_save_time = 0
 
 def serial_receive_thread():
-    time.sleep(1) 
+    global last_db_save_time
+    
+    client = ModbusSerialClient(
+        port=COM_PORT, 
+        baudrate=BAUD_RATE, 
+        timeout=0.3, 
+        stopbits=1,
+        bytesize=8,
+        parity='N'
+    )
+    
     current_status = None
-    last_success_time = time.time()
-    last_emit_time = time.time() 
-    ser = None
-    buffer = b""
-
+    
     while True:
         try:
-            if ser is None or not ser.is_open:
-                try:
-                    ser = serial.Serial(port=COM_PORT, baudrate=BAUD_RATE, timeout=0.1)
-                    print(f"통신 엔진 가동 완료: {COM_PORT} @ {BAUD_RATE}")
-                    buffer = b"" 
-                    last_success_time = time.time() 
-                except Exception:
-                    now = time.time()
-                    if current_status != False or (now - last_emit_time > 3.0):
-                        comm_signal.status_changed.emit(False)
-                        current_status = False; last_emit_time = now
-                    time.sleep(2)
-                    continue 
+            if not client.is_socket_open():
+                client.connect()
+                print(f"PC 마스터 연결 시도: {COM_PORT}")
+                time.sleep(1)
+                continue
 
-            if ser.in_waiting > 0:
-                buffer += ser.read(ser.in_waiting)
+            통신성공_여부 = False
+            수집데이터 = [0] * len(DATA_LABELS) 
+
+            # -------------------------------------------------------------
+            # [1] KEP 한전 계전기 - 국번 6
+            # -------------------------------------------------------------
+            res_kep = safe_modbus_call(client.read_input_registers, address=4, count=32, slave_id=6)
+            if res_kep and not res_kep.isError():
+                통신성공_여부 = True
+                # 나눔수 1000 적용 및 주석 추가
+                수집데이터[4]  = res_kep.registers[0] / 1000.0   # KEP_V_R
+                수집데이터[5]  = res_kep.registers[2] / 1000.0   # KEP_V_S
+                수집데이터[6]  = res_kep.registers[4] / 1000.0   # KEP_V_T
+                수집데이터[7]  = res_kep.registers[6] / 1000.0   # KEP_V_R_S
+                수집데이터[8]  = res_kep.registers[8] / 1000.0   # KEP_V_S_T
+                수집데이터[9]  = res_kep.registers[10] / 1000.0  # KEP_V_T_R
+                수집데이터[10] = res_kep.registers[14]           # KEP_A_R (나눔수 없음)
+                수집데이터[11] = res_kep.registers[16]           # KEP_A_S
+                수집데이터[12] = res_kep.registers[18]           # KEP_A_T
+                수집데이터[13] = res_kep.registers[20]           # KEP_frequency
+                수집데이터[14] = res_kep.registers[24] / 1000.0  # KEP_P_kW
+                # 32비트 결합 후 나눔수 1000 적용
+                수집데이터[15] = ((res_kep.registers[30] << 16) + res_kep.registers[31]) / 1000.0 # KEP_P_kWh 
                 
-                while len(buffer) >= 7:
-                    if buffer[0] != MY_SLAVE_ID:
-                        buffer = buffer[1:]
-                        continue
-                    
-                    func_code = buffer[1]
-                    
-                    if func_code == 0x10:
-                        expected_len = 7 + (NUM_WORDS * 2) + 2 
-                        if len(buffer) < expected_len: break 
-                        
-                        packet = buffer[:expected_len]
-                        if verify_crc(packet):
-                            raw_values = packet[7:7+(NUM_WORDS * 2)]
-                            raw_words = struct.unpack(f'>{NUM_WORDS}h', raw_values)
-                            
-                            word_1, word_2 = raw_words[15], raw_words[16]   
-                            u_word1 = word_1 if word_1 >= 0 else word_1 + 65536
-                            u_word2 = word_2 if word_2 >= 0 else word_2 + 65536
-                            dint_mwh = (u_word2 << 16) + u_word1
-                            if dint_mwh & 0x80000000: dint_mwh -= 0x100000000
-                                
-                            values = (list(raw_words[:15]) + [dint_mwh] + list(raw_words[17:]))
-                            
-                            insert_raw_data(values)
-                            
-                            # 💡 분리된 에어컨 매니저에게 데이터를 넘겨 판단 지시
-                            ac_manager.check_and_control(
-                                indoor_temp=values[0]/10.0, 
-                                outdoor_temp=values[1]/10.0, 
-                                dis_temp1=values[49]/10.0, 
-                                dis_temp2=values[50]/10.0, 
-                                total_load=values[14]
-                            )
-                            
-                            buffer = buffer[expected_len:] 
-                            now = time.time()
-                            if current_status != True or (now - last_emit_time > 3.0):
-                                comm_signal.status_changed.emit(True)
-                                current_status = True; last_emit_time = now
-                            last_success_time = time.time()
-                        else:
-                            buffer = buffer[1:]
+            # -------------------------------------------------------------
+            # [2] TR1 계전기 - 국번 1
+            # -------------------------------------------------------------
+            res_tr1 = safe_modbus_call(client.read_input_registers, address=4, count=38, slave_id=1)
+            if res_tr1 and not res_tr1.isError():
+                통신성공_여부 = True
+                수집데이터[16] = res_tr1.registers[0]            # Tr1_A_R
+                수집데이터[17] = res_tr1.registers[2]            # Tr1_A_S
+                수집데이터[18] = res_tr1.registers[4]            # Tr1_A_T
+                수집데이터[19] = res_tr1.registers[6]            # Tr1_V_R
+                수집데이터[20] = res_tr1.registers[8]            # Tr1_V_S
+                수집데이터[21] = res_tr1.registers[10]           # Tr1_V_T
+                수집데이터[22] = res_tr1.registers[12]           # Tr1_V_R_S
+                수집데이터[23] = res_tr1.registers[14]           # Tr1_V_S_T
+                수집데이터[24] = res_tr1.registers[16]           # Tr1_V_T_R
+                수집데이터[25] = res_tr1.registers[20] / 1000.0  # Tr1_P_kW (나눔수 1000)
 
-                    elif func_code in (0x03, 0x04): 
-                        expected_len = 8 
-                        if len(buffer) < expected_len: break
-                        
-                        packet = buffer[:expected_len]
-                        if verify_crc(packet):
-                            start_addr = struct.unpack('>H', packet[2:4])[0]
-                            num_words = struct.unpack('>H', packet[4:6])[0]
-                            reply_data = []
-                            
-                            for i in range(num_words):
-                                current_addr = start_addr + i
-                                if current_addr == 0:
-                                    reply_data.append(1)
-                                elif current_addr == 1:
-                                    reply_data.append(ac_manager.fan_control_cmd) # 💡 매니저의 상태값 전송
-                                else:
-                                    reply_data.append(0)
-                            
-                            byte_count = num_words * 2
-                            reply_without_crc = struct.pack('>BBB', MY_SLAVE_ID, func_code, byte_count) + struct.pack(f'>{num_words}H', *reply_data)
-                            ser.write(reply_without_crc + calculate_crc(reply_without_crc))
-                            buffer = buffer[expected_len:]
-                        else:
-                            buffer = buffer[1:]
-                    else:
-                        buffer = buffer[1:]
-            time.sleep(0.01)
-            
+            # -------------------------------------------------------------
+            # [3] TR2 계전기 - 국번 2
+            # -------------------------------------------------------------
+            res_tr2 = safe_modbus_call(client.read_input_registers, address=4, count=38, slave_id=2)
+            if res_tr2 and not res_tr2.isError():
+                통신성공_여부 = True
+                수집데이터[27] = res_tr2.registers[0]            # Tr2_A_R
+                수집데이터[28] = res_tr2.registers[2]            # Tr2_A_S
+                수집데이터[29] = res_tr2.registers[4]            # Tr2_A_T
+                수집데이터[30] = res_tr2.registers[6]            # Tr2_V_R
+                수집데이터[31] = res_tr2.registers[8]            # Tr2_V_S
+                수집데이터[32] = res_tr2.registers[10]           # Tr2_V_T
+                수집데이터[33] = res_tr2.registers[12]           # Tr2_V_R_S
+                수집데이터[34] = res_tr2.registers[14]           # Tr2_V_S_T
+                수집데이터[35] = res_tr2.registers[16]           # Tr2_V_T_R
+                수집데이터[36] = res_tr2.registers[20] / 1000.0  # Tr2_P_kW (나눔수 1000)
+
+            # -------------------------------------------------------------
+            # [4] TR3 계전기 - 국번 3
+            # -------------------------------------------------------------
+            res_tr3 = safe_modbus_call(client.read_input_registers, address=4, count=38, slave_id=3)
+            if res_tr3 and not res_tr3.isError():
+                통신성공_여부 = True
+                수집데이터[38] = res_tr3.registers[0]            # Tr3_A_R
+                수집데이터[39] = res_tr3.registers[2]            # Tr3_A_S
+                수집데이터[40] = res_tr3.registers[4]            # Tr3_A_T
+                수집데이터[41] = res_tr3.registers[6]            # Tr3_V_R
+                수집데이터[42] = res_tr3.registers[8]            # Tr3_V_S
+                수집데이터[43] = res_tr3.registers[10]           # Tr3_V_T
+                수집데이터[44] = res_tr3.registers[12]           # Tr3_V_R_S
+                수집데이터[45] = res_tr3.registers[14]           # Tr3_V_S_T
+                수집데이터[46] = res_tr3.registers[16]           # Tr3_V_T_R
+                수집데이터[47] = res_tr3.registers[20] / 1000.0  # Tr3_P_kW (나눔수 1000)
+
+            # -------------------------------------------------------------
+            # [5] LS PLC - 국번 5 (온도 수집 및 환기팬 제어명령 쓰기)
+            # -------------------------------------------------------------
+            res_plc = safe_modbus_call(client.read_holding_registers, address=900, count=52, slave_id=5)
+            if res_plc and not res_plc.isError():
+                통신성공_여부 = True
+                # 모든 온도 및 운전시간에 나눔수 10 적용
+                수집데이터[0]  = res_plc.registers[0] / 10.0     # 실내온도
+                수집데이터[1]  = res_plc.registers[1] / 10.0     # 외기온도
+                
+                # 🚨 오타 수정: res_tr1, res_tr2 등이 아닌 res_plc 통신 결과에서 뽑아야 합니다!
+                수집데이터[26] = res_plc.registers[2] / 10.0     # Tr1_Temp
+                수집데이터[37] = res_plc.registers[3] / 10.0     # Tr2_Temp
+                수집데이터[48] = res_plc.registers[4] / 10.0     # Tr3_Temp
+                
+                수집데이터[49] = res_plc.registers[5] / 10.0     # 에어콘01온도
+                수집데이터[50] = res_plc.registers[6] / 10.0     # 에어콘02온도
+                수집데이터[2]  = res_plc.registers[7] / 10.0     # SF운전시간
+                수집데이터[3]  = res_plc.registers[8] / 10.0     # EF운전시간
+                
+                ac_manager.check_and_control(
+                    indoor_temp=수집데이터[0],      # 이미 /10.0이 되었으므로 바로 투입
+                    outdoor_temp=수집데이터[1], 
+                    dis_temp1=수집데이터[49], 
+                    dis_temp2=수집데이터[50], 
+                    total_load=수집데이터[14]       # KEP_P_kW 연동
+                )
+                safe_modbus_call(client.write_register, address=2000, value=ac_manager.fan_control_cmd, slave_id=5)
+
+            # -------------------------------------------------------------
+            # [6] UI 화면 아이콘 연동 및 1분 로깅 방어막
+            # -------------------------------------------------------------
+            if 통신성공_여부 and current_status != True:
+                comm_signal.status_changed.emit(True)
+                current_status = True
+            elif not 통신성공_여부 and current_status != False:
+                comm_signal.status_changed.emit(False)
+                current_status = False
+
+            now_time = time.time()
+            if 통신성공_여부 and (now_time - last_db_save_time >= 58.0):
+                insert_raw_data(수집데이터)
+                last_db_save_time = now_time
+
+            time.sleep(0.5)
+
         except Exception as e:
-            if ser: ser.close(); ser = None
+            print(f"마스터 루프 에러: {e}")
+            if client: client.close()
             time.sleep(1)
 
+# 💡 DB 저장 함수 간소화: 위에서 나누기를 다 했으므로 바로 DB에 꽂아 넣습니다!
 def insert_raw_data(values):
     if len(values) < len(DATA_LABELS): return
     try:
@@ -141,10 +200,9 @@ def insert_raw_data(values):
         now = datetime.now()
         l_date, l_time = now.strftime('%Y-%m-%d'), now.strftime('%H:%M:%S')
         
-        DIV_BY_10 = {"실내온도", "외기온도", "SF운전시간", "EF운전시간", "Tr1_Temp", "Tr2_Temp", "Tr3_Temp", "에어콘01온도", "에어콘02온도"}
-        DIV_BY_100 = {"KEP_A_R", "KEP_A_S", "KEP_A_T", "KEP_frequency", "KEP_V_R", "KEP_V_S", "KEP_V_T", "KEP_V_R_S", "KEP_V_S_T", "KEP_V_T_R", "KEP_P_mWh"}
+        # 복잡했던 DIV_BY_10, DIV_BY_100 로직 완전 삭제!
+        adjusted_values = [round(float(val), 1) for val in values]
         
-        adjusted_values = [val / 10.0 if label in DIV_BY_10 else (val / 100.0 if label in DIV_BY_100 else float(val)) for label, val in zip(DATA_LABELS, values)]
         placeholders = ", ".join(["%s"] * len(adjusted_values))
         col_names = ", ".join([f"`{name}`" for name in DATA_LABELS])
         
@@ -152,16 +210,3 @@ def insert_raw_data(values):
         conn.commit(); conn.close()
     except Exception as e:
         pass
-
-def verify_crc(data):
-    if len(data) < 4: return False
-    calc_crc = calculate_crc(data[:-2])
-    return data[-2:] == calc_crc or data[-2:] == calc_crc[::-1]
-
-def calculate_crc(data):
-    crc = 0xFFFF
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            crc = (crc >> 1) ^ 0xA001 if crc & 0x0001 else crc >> 1
-    return struct.pack('<H', crc)
