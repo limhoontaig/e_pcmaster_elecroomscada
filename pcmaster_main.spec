@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['maria_main.py'],
+    ['pcmaster_main.py'],
     pathex=[],
     binaries=[],
     datas=[('template_전기실_운영일지.xlsx', '.'), ('free-icon-folder-2015058.ico', '.'), ('config.ini', '.')],
