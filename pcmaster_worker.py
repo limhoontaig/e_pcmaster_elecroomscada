@@ -12,7 +12,6 @@ from db_manager import DATA_LABELS, get_db_raw_connection
 from ac_controller import ac_manager 
 
 # --- pymodbus 버전 충돌 방지용 만능 호환 함수 ---
-# --- pymodbus 버전 충돌 방지용 만능 호환 함수 ---
 # 💡 1. 괄호 안에 values=None 을 추가합니다.
 def safe_modbus_call(func, address, count=None, value=None, values=None, slave_id=1):
     for key in ["slave", "unit", "slave_id", "device_id"]:
@@ -48,7 +47,9 @@ class CommSignal(QObject):
 
 comm_signal = CommSignal()
 last_db_save_time = 0
+pending_ac_fan_values = None
 pending_tr_fan_values = None
+current_dynamic_fan_off = 28.0
 
 client = ModbusSerialClient(
         port=COM_PORT, 
@@ -156,6 +157,31 @@ def serial_receive_thread():
                 # 모든 온도 및 운전시간에 나눔수 10 적용
                 수집데이터[0]  = res_plc.registers[0] / 10.0     # 실내온도
                 수집데이터[1]  = res_plc.registers[1] / 10.0     # 외기온도
+
+                # ==============================================================
+                # 🌟 [스마트 제어] 외기 온도 연동 휀 정지온도 자동 변속 로직 🌟
+                # ==============================================================
+                global current_dynamic_fan_off
+                outdoor_temp = 수집데이터[1]
+                new_fan_off = current_dynamic_fan_off
+                
+                # 외기온도 조건에 따른 정지 온도 판단
+                if outdoor_temp <= 15.0:
+                    new_fan_off = 25.0
+                elif 22.0 >= outdoor_temp >= 17.0:
+                    new_fan_off = 28.0
+                elif outdoor_temp >= 23.0:
+                    new_fan_off = 29.0
+                    
+                # 설정 온도가 기존과 달라졌을 때만 PLC(D2021)에 전송 (통신 부하 방지)
+                if new_fan_off != current_dynamic_fan_off:
+                    # D2021(정지 실내온도) 번지에만 핀포인트로 변경된 값을 씁니다.
+                    res_write = safe_modbus_call(client.write_register, address=2021, value=int(new_fan_off * 10), slave_id=5)
+                    if res_write and not res_write.isError():
+                        print(f"🌡️ [스마트 자동제어] 외기 {outdoor_temp}도 감지! 환기팬 정지 온도를 {new_fan_off}도로 변경하여 PLC에 적용했습니다.")
+                        current_dynamic_fan_off = new_fan_off  # 성공 시 기억값 갱신
+                # ==============================================================
+
                 
                 # 🚨 오타 수정: res_tr1, res_tr2 등이 아닌 res_plc 통신 결과에서 뽑아야 합니다!
                 수집데이터[26] = res_plc.registers[2] / 10.0     # Tr1_Temp
