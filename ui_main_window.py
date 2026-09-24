@@ -20,6 +20,7 @@ import mariadb_backup
 from ui_dialogs import ManualMeterInputDialog, FieldInspectionDialog 
 from ui_ac_settings import ACSettingsDialog
 from tr_controller import TRFanSettingsDialog
+from ui_hmi_dashboard import HMIDashboardWidget
 import pcmaster_worker # 통신 스레드가 있는 파일을 임포트합니다.
 
 class SCADAWindow(QMainWindow):
@@ -89,7 +90,6 @@ class SCADAWindow(QMainWindow):
 
         # 👇👇👇 [여기에 추가] "선택 날짜:" 글자를 더블클릭하면 팝업 실행 👇👇👇
         lbl_date_title.mouseDoubleClickEvent = self.open_tr_fan_settings_dialog
-        # 👆👆👆 [추가 끝] 👆👆👆
 
         # ⭐ [신규] RS485 통신 상태 라벨 생성
         self.lbl_rs485_status = QLabel("⚫ 통신 확인 중...")
@@ -101,7 +101,8 @@ class SCADAWindow(QMainWindow):
             padding: 6px 12px;
             border-radius: 4px;
         """)
-        
+        self.btn_show_hmi = QPushButton("HMI 대시보드")
+        self.btn_show_hmi.setStyleSheet("background-color: #f39c12; color: white; font-weight: bold; min-height: 35px;")
         self.btn_show_table = QPushButton("종합 데이터 표")
         self.btn_show_table.setStyleSheet("background-color: #2980b9; color: white; font-weight: bold; min-height: 35px;")
         self.btn_show_graph = QPushButton("부하 변동 그래프")
@@ -131,6 +132,7 @@ class SCADAWindow(QMainWindow):
         top_layout.addWidget(lbl_date_title)
         top_layout.addWidget(self.qdate)
         top_layout.addWidget(self.lbl_rs485_status)
+        top_layout.addWidget(self.btn_show_hmi)
         top_layout.addWidget(self.btn_show_table)
         top_layout.addWidget(self.btn_show_graph)
         top_layout.addWidget(self.btn_export_excel)
@@ -141,6 +143,12 @@ class SCADAWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         main_layout.addWidget(self.stack)
+
+        # ==================== 0. 전력설비 데쉬보드 탭 구성 ====================
+        # 👇👇👇 [신규 추가] 0번 페이지: HMI 대시보드 
+        self.hmi_dashboard = HMIDashboardWidget()
+        self.stack.addWidget(self.hmi_dashboard)
+        # 👆👆👆
 
         # ==================== 1. 테이블 탭 구성 ====================
         self.page_table = QWidget()
@@ -203,8 +211,9 @@ class SCADAWindow(QMainWindow):
         self.stack.addWidget(self.graph_manager)
 
         # ==================== 3. 이벤트 시그널 연결 ====================
-        self.btn_show_table.clicked.connect(lambda: self.stack.setCurrentIndex(0))
-        self.btn_show_graph.clicked.connect(self.on_graph_tab_changed) # 변경
+        self.btn_show_hmi.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        self.btn_show_table.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        self.btn_show_graph.clicked.connect(self.on_graph_tab_changed) # Index(2)로 이동하도록 수정 필요
         self.btn_export_excel.clicked.connect(self.export_excel_click)
         self.btn_meter_input.clicked.connect(self.click_open_meter_popup)
         self.qdate.dateChanged.connect(self.auto_refresh)
@@ -248,7 +257,7 @@ class SCADAWindow(QMainWindow):
 
     def on_graph_tab_changed(self):
         """그래프 탭으로 전환될 때 즉시 그래프를 그리도록 지시하는 함수"""
-        self.stack.setCurrentIndex(1)
+        self.stack.setCurrentIndex(2)
         self.graph_manager.update_graph()
 
     def load_data(self):

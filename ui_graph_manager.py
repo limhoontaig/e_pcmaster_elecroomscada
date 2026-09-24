@@ -103,7 +103,7 @@ class GraphManager(QWidget):
         self.update_graph()
 
     def update_graph(self):
-        if self.main_win.stack.currentIndex() != 1: return
+        if self.main_win.stack.currentIndex() != 2: return
         
         selected_items = self.data_selector.selectedItems()
         if not selected_items:
