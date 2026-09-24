@@ -19,6 +19,7 @@ import excel_report
 import mariadb_backup
 from ui_dialogs import ManualMeterInputDialog, FieldInspectionDialog 
 from ui_ac_settings import ACSettingsDialog
+from tr_controller import TRFanSettingsDialog
 import pcmaster_worker # 통신 스레드가 있는 파일을 임포트합니다.
 
 class SCADAWindow(QMainWindow):
@@ -87,7 +88,7 @@ class SCADAWindow(QMainWindow):
         lbl_date_title.setStyleSheet("font-size: 14px; font-weight: bold;")
 
         # 👇👇👇 [여기에 추가] "선택 날짜:" 글자를 더블클릭하면 팝업 실행 👇👇👇
-        lbl_date_title.mouseDoubleClickEvent = self.open_ac_settings_dialog
+        lbl_date_title.mouseDoubleClickEvent = self.open_tr_fan_settings_dialog
         # 👆👆👆 [추가 끝] 👆👆👆
 
         # ⭐ [신규] RS485 통신 상태 라벨 생성
@@ -213,6 +214,12 @@ class SCADAWindow(QMainWindow):
     def open_ac_settings_dialog(self, event):
         dialog = ACSettingsDialog(self)
         dialog.exec_()
+
+    # 👇👇👇 [신규 추가] 변압기 환기팬 설정 팝업 호출 함수 👇👇👇
+    def open_tr_fan_settings_dialog(self, event):
+        dialog = TRFanSettingsDialog(parent=self)
+        dialog.exec_()
+    # 👆👆👆 [신규 추가 끝] 👆👆👆
 
     def check_daily_backup(self):
         """백그라운드에서 매시간 돌며 자정이 지났는지 확인하고 연 단위 백업 파일 최신화"""

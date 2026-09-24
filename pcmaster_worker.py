@@ -12,11 +12,17 @@ from db_manager import DATA_LABELS, get_db_raw_connection
 from ac_controller import ac_manager 
 
 # --- pymodbus 버전 충돌 방지용 만능 호환 함수 ---
-def safe_modbus_call(func, address, count=None, value=None, slave_id=1):
+# --- pymodbus 버전 충돌 방지용 만능 호환 함수 ---
+# 💡 1. 괄호 안에 values=None 을 추가합니다.
+def safe_modbus_call(func, address, count=None, value=None, values=None, slave_id=1):
     for key in ["slave", "unit", "slave_id", "device_id"]:
         kwargs = {key: slave_id}
         if count is not None: kwargs['count'] = count
         if value is not None: kwargs['value'] = value
+        
+        # 💡 2. 여러 개의 데이터(values)가 들어오면 처리해주는 코드를 한 줄 추가합니다.
+        if values is not None: kwargs['values'] = values 
+        
         try:
             return func(address=address, **kwargs)
         except TypeError as e:
@@ -42,11 +48,9 @@ class CommSignal(QObject):
 
 comm_signal = CommSignal()
 last_db_save_time = 0
+pending_tr_fan_values = None
 
-def serial_receive_thread():
-    global last_db_save_time
-    
-    client = ModbusSerialClient(
+client = ModbusSerialClient(
         port=COM_PORT, 
         baudrate=BAUD_RATE, 
         timeout=0.3, 
@@ -54,6 +58,9 @@ def serial_receive_thread():
         bytesize=8,
         parity='N'
     )
+
+def serial_receive_thread():
+    global last_db_save_time
     
     current_status = None
     
@@ -168,6 +175,13 @@ def serial_receive_thread():
                     total_load=수집데이터[14]       # KEP_P_kW 연동
                 )
                 safe_modbus_call(client.write_register, address=2000, value=ac_manager.fan_control_cmd, slave_id=5)
+
+                # 👇👇👇 [여기에 신규 추가] 순회 중 메모장에 값이 있으면 PLC로 쏘고 메모장 지우기 👇👇👇
+                global pending_tr_fan_values
+                if pending_tr_fan_values is not None:
+                    safe_modbus_call(client.write_registers, address=2010, values=pending_tr_fan_values, slave_id=5)
+                    pending_tr_fan_values = None # 전송 완료했으니 메모장 비우기
+                # 👆👆👆
 
             # -------------------------------------------------------------
             # [6] UI 화면 아이콘 연동 및 1분 로깅 방어막
