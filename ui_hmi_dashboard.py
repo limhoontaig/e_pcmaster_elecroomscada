@@ -4,6 +4,8 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
 
+import pcmaster_worker
+
 # ==============================================================================
 # 애니메이션 모터 클래스 (변압기 팬 및 환기설비 팬 공용 사용)
 # ==============================================================================
@@ -78,6 +80,29 @@ class HMIDashboardWidget(QWidget):
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
+
+        self.plc_addresses = {
+            # --- TR 변압기 냉각 (PLC FF 로직 - 누를때 토글) ---
+            "tr_cooling_auto": 100,      # M00100
+            "tr_cooling_start": 101,     # M00101
+            "tr_manual_start_1": 102,    # M00102
+            "tr_manual_start_2": 103,    # M00103
+            "tr_manual_start_3": 104,    # M00104
+            
+            # --- 환기설비 EF 배기 (누를때 ON, PLC 자체 리셋) ---
+            "EF_local_auto_start": 105,  # M00105
+            "EF_local_manual_start": 106,# M00106 (selection)
+            "EF_op_room_start": 107,     # M00107
+            "EF_stop": 108,              # M00108
+            "EF_trip_reset": 109,        # M00109
+
+            # --- 환기설비 SF 급기 (누를때 ON, PLC 자체 리셋) ---
+            "SF_local_auto_start": 110,  # M00110
+            "SF_local_manual_start": 111,# M00111 (selection)
+            "SF_op_room_start": 112,     # M00112
+            "SF_stop": 113,              # M00113
+            "SF_trip_reset": 114,        # M00114
+        }
         
         # --- 상단 타이틀 ---
         top_layout = QHBoxLayout()
@@ -132,7 +157,7 @@ class HMIDashboardWidget(QWidget):
         main_layout.addWidget(data_frame, 1)
 
     # ==========================================================================
-    # 🌟 [수정됨] 환기설비 패널 (상태 램프를 버튼으로 교체) 🌟
+    # 환기설비 패널 
     # ==========================================================================
     def create_ventilation_panel(self):
         frame = QFrame()
@@ -159,11 +184,10 @@ class HMIDashboardWidget(QWidget):
         fan_graphic = FanGraphicWidget(fan_type="VENT")
         glayout.addWidget(fan_graphic)
 
-        # 💡 [핵심 변경] 상태 램프를 단순 라벨(QLabel)에서 클릭 가능한 버튼(QPushButton)으로 변경
         lamp_layout = QHBoxLayout()
         
         run_lamp = QPushButton("정지중")
-        run_lamp.setCursor(QCursor(Qt.PointingHandCursor)) # 마우스 올리면 손가락 모양으로 변경
+        run_lamp.setCursor(QCursor(Qt.PointingHandCursor))
         run_lamp.setStyleSheet("background-color: #555; color: white; padding: 5px; font-weight: bold; border-radius: 3px; border: 1px solid #222;")
         run_lamp.clicked.connect(lambda: self.on_system_stop_clicked(prefix))
         
@@ -182,6 +206,7 @@ class HMIDashboardWidget(QWidget):
         glayout.addWidget(QLabel("<b>[제어 스위치]</b>"))
         btn_layout = QGridLayout()
         
+        # 버튼 생성 호출
         btn_remote = self.create_momentary_button("방재실 원격", f"{prefix}_op_room_start")
         btn_auto = self.create_momentary_button("현장 자동", f"{prefix}_local_auto_start")
         btn_manual = self.create_momentary_button("현장 수동", f"{prefix}_local_manual_start")
@@ -197,26 +222,29 @@ class HMIDashboardWidget(QWidget):
         
         return fan_graphic, vbox
 
+    # 💡 [핵심 변경 1] 운전/트립 램프 버튼 클릭 시에도 '1'만 쏘도록 수정
     def on_system_stop_clicked(self, prefix):
-        """운전 램프를 클릭했을 때 실행: 전체 시스템 중지 명령"""
-        print(f"🚨 [명령 전송] {prefix} 설비 마스터 강제 정지 신호 전송!")
-        # 추후 PLC 통신 로직 연결
+        signal_name = f"{prefix}_stop"
+        addr = self.plc_addresses.get(signal_name)
+        if addr is not None:
+            self.safe_write_bit(addr, True, f"{prefix} 강제 정지 펄스")
 
     def on_thermal_reset_clicked(self, prefix):
-        """트립 램프를 클릭했을 때 실행: 써멀 트립 리셋(Reset) 명령 및 화면 복구"""
         lamp = getattr(self, f"lbl_{prefix}_trip")
-        # 상태가 트립(붉은색)일 때만 리셋 동작이 먹히도록 처리
+        signal_name = f"{prefix}_trip_reset"
+        addr = self.plc_addresses.get(signal_name)
+        
         if "써멀" in lamp.text():
-            print(f"♻️ [명령 전송] {prefix} 마그네트 써멀 트립 리셋(Reset) 신호 전송!")
-            # 임시로 즉시 UI를 '정상'으로 복구해 보여줌 (추후 PLC 피드백과 연동)
+            if addr is not None:
+                self.safe_write_bit(addr, True, f"{prefix} 트립 리셋 펄스")
+            
             lamp.setText("정상")
             lamp.setStyleSheet("background-color: #27ae60; color: white; padding: 5px; font-weight: bold; border-radius: 3px; border: 1px solid #222;")
         else:
-            # 테스트를 위해 '정상'일 때 누르면 강제로 트립을 발생시켜 봅니다.
             print(f"⚠️ [테스트] {prefix} 강제 써멀 트립 발생!")
             lamp.setText("써멀 트립")
-            lamp.setStyleSheet("background-color: #e74c3c; color: yellow; padding: 5px; font-weight: bold; border-radius: 3px; border: 2px solid red;")
-
+            lamp.setStyleSheet("background-color: #e74c3c; color: yellow; padding: 5px; font-weight: bold; border-radius: 3px; border: 2px solid red;")    # 💡 [핵심 변경 2] 버튼 이벤트 통합 (released 삭제, clicked 시 '1' 펄스 전송)
+    
     def create_momentary_button(self, text, signal_name, color_type="normal"):
         btn = QPushButton(text)
         if color_type == "danger":
@@ -229,13 +257,17 @@ class HMIDashboardWidget(QWidget):
                 QPushButton { background-color: #2980b9; color: white; padding: 8px; font-weight: bold; border-radius: 4px; }
                 QPushButton:pressed { background-color: #3498db; border: 2px solid white; }
             """)
-        btn.pressed.connect(lambda: self.on_momentary_pressed(signal_name, True))
-        btn.released.connect(lambda: self.on_momentary_pressed(signal_name, False))
+        
+        # 마우스를 뗄 때(released) 0을 보내던 기존 코드를 삭제하고, 클릭 시 단일 전송
+        btn.clicked.connect(lambda: self.on_momentary_pressed(signal_name))
         return btn
 
-    def on_momentary_pressed(self, signal_name, state):
-        val = "1 (ON)" if state else "0 (OFF)"
-        print(f"👉 [비트 제어 전송] {signal_name} 신호: {val}")
+    def on_momentary_pressed(self, signal_name):
+        addr = self.plc_addresses.get(signal_name)
+        if addr is not None:
+            self.safe_write_bit(addr, True, f"{signal_name} 단일 펄스")
+        else:
+            print(f"⚠️ 에러: {signal_name}에 매핑된 주소가 없습니다.")
 
     # ==========================================================================
     # [우측] 변압기(TR) 패널 생성부 
@@ -314,6 +346,10 @@ class HMIDashboardWidget(QWidget):
         is_on = self.btn_master.isChecked()
         self.btn_master.setText("전체 냉각설비 가동중" if is_on else "❄️ 겨울철 냉각설비 정지")
         self.btn_master.setStyleSheet(self.get_master_style(is_on))
+        
+        # 방어막 함수 적용
+        self.safe_write_bit(101, is_on, "냉각설비 마스터")
+
         self.sub_ctrl.setVisible(is_on) 
         if not is_on:
             self.btn_auto.setChecked(True)
@@ -325,6 +361,10 @@ class HMIDashboardWidget(QWidget):
         is_auto = self.btn_auto.isChecked()
         self.btn_auto.setText("자동 운전" if is_auto else "수동 운전")
         self.btn_auto.setStyleSheet(self.get_auto_manual_style(is_auto))
+        
+        # 방어막 함수 적용
+        self.safe_write_bit(100, is_auto, "TR 자동/수동 모드")
+
         if is_auto:
             self.btn_tr1.setChecked(False)
             self.btn_tr2.setChecked(False)
@@ -338,6 +378,12 @@ class HMIDashboardWidget(QWidget):
     def create_toggle_button(self, text):
         btn = QPushButton(text)
         btn.setCheckable(True) 
+        
+        # 💡 [핵심 해결] 글자수가 변해도 버튼 크기가 줄어들지 않도록 최소 너비 140 고정
+        btn.setMinimumWidth(100)
+        from PyQt5.QtWidgets import QSizePolicy
+        btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
         btn.setStyleSheet("""
             QPushButton { background-color: #34495e; color: white; border: 2px solid #2c3e50; padding: 10px; border-radius: 5px; font-weight: bold; }
             QPushButton:hover { background-color: #3d566e; }
@@ -347,16 +393,85 @@ class HMIDashboardWidget(QWidget):
         return btn
 
     def update_tr_fan_status(self, tr_idx, is_running):
-        graphic = getattr(self, f"tr{tr_idx}_graphic")
-        lbl = getattr(self, f"lbl_tr{tr_idx}_status")
+        """사용자가 화면에서 수동 기동 버튼을 눌렀을 때 실행됩니다."""
         btn = getattr(self, f"btn_tr{tr_idx}")
         
-        graphic.set_fan_state(is_running)
-        lbl.setText("가동중" if is_running else "정지중")
-        lbl.setStyleSheet(f"background-color: {'#3498db' if is_running else '#555'}; color: white; padding: 5px; font-weight: bold;")
-        btn.setText(f"TR-{tr_idx} 휀 ON" if is_running else f"TR-{tr_idx} 휀 OFF")
+        # 💡 [핵심 해결] 글자 길이를 비슷하게 맞춰서 시각적인 안정감 부여
+        btn.setText(f"TR-{tr_idx} 수동 ON" if is_running else f"TR-{tr_idx} 수동 OFF")
+        
+        # 애니메이션은 건드리지 않고 오직 통신 명령만 전송합니다.
+        addr = 101 + tr_idx # M00102, M00103, M00104
+        self.safe_write_bit(addr, is_running, f"TR-{tr_idx} 수동 조작")
 
+    # ==========================================================================
+    # 📡 [신규 추가] PLC 피드백 수신 및 애니메이션 구동 전용 함수
+    # ==========================================================================
+    def update_plc_status(self, coils):
+        """
+        pcmaster_worker 에서 0.5초마다 읽어오는 M0200 ~ M0222 상태 리스트를 받아
+        실제 램프 색상과 휀 애니메이션을 구동합니다.
+        (coils[0]이 M0200, coils[12]가 M0212 에 해당)
+        """
+        # --- 1. 환기설비(SF/EF) 상태 피드백 반영 ---
+        # EF (배기) 피드백 (M0203: 운전확인, M0205: 트립)
+        if len(coils) > 5:
+            ef_run = coils[3]  # M0203
+            ef_trip = coils[5] # M0205
+            self.ef_graphic.set_fan_state(ef_run)
+            self.update_lamp_ui(self.lbl_EF_run, ef_run, "가동중", "정지중", "#3498db")
+            self.update_lamp_ui(self.lbl_EF_trip, ef_trip, "써멀 트립", "정상", "#e74c3c")
+
+        # SF (급기) 피드백 (M0209: 운전확인, M0211: 트립)
+        if len(coils) > 11:
+            sf_run = coils[9]  # M0209
+            sf_trip = coils[11]# M0211
+            self.sf_graphic.set_fan_state(sf_run)
+            self.update_lamp_ui(self.lbl_SF_run, sf_run, "가동중", "정지중", "#3498db")
+            self.update_lamp_ui(self.lbl_SF_trip, sf_trip, "써멀 트립", "정상", "#e74c3c")
+
+        # --- 2. 변압기(TR) 휀 상태 피드백 반영 ---
+        # TR1~3 휀 운전 확인 (M0212, M0213, M0214)
+        if len(coils) > 14:
+            tr_status_list = [coils[12], coils[13], coils[14]]
+            
+            for i, is_running in enumerate(tr_status_list, start=1):
+                graphic = getattr(self, f"tr{i}_graphic")
+                lbl = getattr(self, f"lbl_tr{i}_status")
+                
+                # 💡 [핵심] 실제 피드백이 들어왔을 때만 애니메이션이 돌아갑니다!
+                graphic.set_fan_state(is_running)
+                
+                lbl.setText("가동중 (동작확인)" if is_running else "정지중")
+                lbl.setStyleSheet(f"background-color: {'#3498db' if is_running else '#555'}; color: white; padding: 5px; font-weight: bold;")
+
+    def update_lamp_ui(self, label, state, on_text, off_text, on_color):
+        """램프 색상 변경 헬퍼 함수"""
+        if state:
+            label.setText(on_text)
+            label.setStyleSheet(f"background-color: {on_color}; color: white; padding: 5px; font-weight: bold; border-radius: 3px; border: 1px solid #222;")
+        else:
+            label.setText(off_text)
+            # 트립이 아닐 때(정상)는 녹색, 가동 중이 아닐 때(정지)는 회색
+            default_color = "#27ae60" if off_text == "정상" else "#555"
+            label.setStyleSheet(f"background-color: {default_color}; color: white; padding: 5px; font-weight: bold; border-radius: 3px; border: 1px solid #222;")
+    
     def create_lcd_label(self, init_text, color):
         lbl = QLabel(init_text); lbl.setAlignment(Qt.AlignCenter)
         lbl.setStyleSheet(f"QLabel {{ background-color: #001111; color: {color}; font-family: 'Consolas'; font-size: 20px; font-weight: bold; border: 1px inset #333; }}")
         return lbl
+
+    # ==========================================================================
+    # 🛡️ [신규 추가] 통신 에러 방어막 (프로그램 튕김 방지)
+    # ==========================================================================
+    def safe_write_bit(self, addr, state, log_msg=""):
+        """UI에서 통신을 쏠 때 에러가 나도 프로그램이 죽지 않도록 보호합니다."""
+        print(f"👉 [명령] {log_msg} (M0{addr:03d}) ➡️ {state}")
+        try:
+            # 실제 통신 시도
+            pcmaster_worker.write_plc_bit(addr, state)
+        except Exception as e:
+            # 통신 에러가 터져도 프로그램을 죽이지 않고 경고창/로그만 띄움
+            error_msg = f"장비와 통신할 수 없습니다.\n통신선 연결이나 포트 상태를 확인하세요.\n(상세 에러: {e})"
+            print(f"⚠️ [통신 에러 차단] {error_msg}")
+            # 필요하다면 아래 주석을 풀어 팝업창을 띄울 수도 있습니다.
+            # QMessageBox.warning(self, "통신 오류", error_msg)

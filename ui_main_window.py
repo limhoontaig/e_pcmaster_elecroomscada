@@ -46,7 +46,7 @@ class SCADAWindow(QMainWindow):
         icon_path = self.resource_path("free-icon-folder-2015058.ico")
         self.setWindowIcon(QIcon(icon_path))
         self.setWindowTitle("래미안개포루체하임아파트 변전실 데이터 통합 관리 시스템 (Developed by 관리과장 임훈택)")
-        self.resize(1400, 1000)
+        self.resize(1500, 1000)
         
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -249,6 +249,7 @@ class SCADAWindow(QMainWindow):
         self.btn_show_hmi.clicked.connect(lambda: self.stack.setCurrentIndex(0))
         self.btn_show_table.clicked.connect(lambda: self.stack.setCurrentIndex(1))
         self.btn_show_graph.clicked.connect(self.on_graph_tab_changed) 
+        pcmaster_worker.comm_signal.plc_status_update.connect(self.hmi_dashboard.update_plc_status)
         
         # 신규 보고서 버튼 연결
         self.btn_show_report.clicked.connect(lambda: self.stack.setCurrentIndex(3)) 
