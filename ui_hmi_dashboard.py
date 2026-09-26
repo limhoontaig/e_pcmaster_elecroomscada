@@ -92,6 +92,7 @@ class HMIDashboardWidget(QWidget):
             # --- 환기설비 EF 배기 (누를때 ON, PLC 자체 리셋) ---
             "EF_local_auto_start": 105,  # M00105
             "EF_local_manual_start": 106,# M00106 (selection)
+            "EF_local_manual_start_sw": 116, # 🌟 M00116
             "EF_op_room_start": 107,     # M00107
             "EF_stop": 108,              # M00108
             "EF_trip_reset": 109,        # M00109
@@ -99,6 +100,7 @@ class HMIDashboardWidget(QWidget):
             # --- 환기설비 SF 급기 (누를때 ON, PLC 자체 리셋) ---
             "SF_local_auto_start": 110,  # M00110
             "SF_local_manual_start": 111,# M00111 (selection)
+            "SF_local_manual_start_sw": 117, # 🌟 M00117
             "SF_op_room_start": 112,     # M00112
             "SF_stop": 113,              # M00113
             "SF_trip_reset": 114,        # M00114
@@ -175,6 +177,9 @@ class HMIDashboardWidget(QWidget):
         layout.addLayout(equip_layout)
         return frame
 
+    # --------------------------------------------------------------------------
+    # 1. 제어 스위치 생성부 (버튼을 self에 저장하도록 수정)
+    # --------------------------------------------------------------------------
     def create_fan_control_unit(self, title, prefix):
         vbox = QVBoxLayout()
         group = QGroupBox(title)
@@ -206,21 +211,55 @@ class HMIDashboardWidget(QWidget):
         glayout.addWidget(QLabel("<b>[제어 스위치]</b>"))
         btn_layout = QGridLayout()
         
-        # 버튼 생성 호출
         btn_remote = self.create_momentary_button("방재실 원격", f"{prefix}_op_room_start")
         btn_auto = self.create_momentary_button("현장 자동", f"{prefix}_local_auto_start")
         btn_manual = self.create_momentary_button("현장 수동", f"{prefix}_local_manual_start")
         btn_stop = self.create_momentary_button("정 지", f"{prefix}_stop", color_type="danger")
 
+        # 🌟 [신규 추가] 수동 기동/정지 전용 토글 스위치
+        btn_manual_run = QPushButton("수동 기동(OFF)")
+        btn_manual_run.setCheckable(True)
+        btn_manual_run.setStyleSheet(self.get_toggle_style(False))
+        # 람다식으로 클릭 이벤트 연결 (prefix 전달)
+        btn_manual_run.clicked.connect(lambda checked, p=prefix: self.on_manual_run_toggled(p, checked))
+
+        # 🌟 [배치 변경] 3칸짜리 그리드로 직관적 구성
+        # 윗줄: 모드 셀렉터 3형제
         btn_layout.addWidget(btn_remote, 0, 0)
         btn_layout.addWidget(btn_auto, 0, 1)
-        btn_layout.addWidget(btn_manual, 1, 0)
-        btn_layout.addWidget(btn_stop, 1, 1)
+        btn_layout.addWidget(btn_manual, 0, 2)
+        
+        # 아랫줄: 정지 버튼(두 칸 차지)과 수동 기동 버튼(수동 셀렉터 바로 아래)
+        btn_layout.addWidget(btn_stop, 1, 0, 1, 2) 
+        btn_layout.addWidget(btn_manual_run, 1, 2) 
+
+        setattr(self, f"btn_{prefix}_remote", btn_remote)
+        setattr(self, f"btn_{prefix}_auto", btn_auto)
+        setattr(self, f"btn_{prefix}_manual", btn_manual)
+        setattr(self, f"btn_{prefix}_stop", btn_stop)
+        setattr(self, f"btn_{prefix}_manual_run", btn_manual_run) # 객체 저장
         
         glayout.addLayout(btn_layout)
         vbox.addWidget(group)
         
         return fan_graphic, vbox
+
+    # 🌟 [신규 추가] 토글 스위치 스타일 및 클릭 동작 함수
+    def get_toggle_style(self, is_on):
+        if is_on:
+            return "background-color: #d35400; color: yellow; padding: 8px; font-weight: bold; border-radius: 4px; border: 2px solid white;"
+        else:
+            return "background-color: #34495e; color: #bdc3c7; padding: 8px; font-weight: bold; border-radius: 4px; border: 1px solid #2c3e50;"
+
+    def on_manual_run_toggled(self, prefix, checked):
+        btn = getattr(self, f"btn_{prefix}_manual_run")
+        btn.setText("수동 기동(ON)" if checked else "수동 기동(OFF)")
+        btn.setStyleSheet(self.get_toggle_style(checked))
+        
+        signal_name = f"{prefix}_local_manual_start_sw"
+        addr = self.plc_addresses.get(signal_name)
+        if addr is not None:
+            self.safe_write_bit(addr, checked, f"{prefix} 수동 기동 토글")
 
     # 💡 [핵심 변경 1] 운전/트립 램프 버튼 클릭 시에도 '1'만 쏘도록 수정
     def on_system_stop_clicked(self, prefix):
@@ -403,47 +442,98 @@ class HMIDashboardWidget(QWidget):
         addr = 101 + tr_idx # M00102, M00103, M00104
         self.safe_write_bit(addr, is_running, f"TR-{tr_idx} 수동 조작")
 
-    # ==========================================================================
-    # 📡 [신규 추가] PLC 피드백 수신 및 애니메이션 구동 전용 함수
-    # ==========================================================================
+    # --------------------------------------------------------------------------
+    # 2. 통신 피드백 수신부 (셀렉터 및 정지 상태 점등 로직 추가)
+    # --------------------------------------------------------------------------
     def update_plc_status(self, coils):
-        """
-        pcmaster_worker 에서 0.5초마다 읽어오는 M0200 ~ M0222 상태 리스트를 받아
-        실제 램프 색상과 휀 애니메이션을 구동합니다.
-        (coils[0]이 M0200, coils[12]가 M0212 에 해당)
-        """
-        # --- 1. 환기설비(SF/EF) 상태 피드백 반영 ---
-        # EF (배기) 피드백 (M0203: 운전확인, M0205: 트립)
+        """pcmaster_worker 에서 읽어온 M0200 ~ M0222 상태 반영"""
+        
+        # --- 1. 배기휀(EF) 상태 피드백 반영 ---
         if len(coils) > 5:
-            ef_run = coils[3]  # M0203
-            ef_trip = coils[5] # M0205
+            # 💡 파이썬 주소 기준 (에뮬레이터에서는 +1 한 주소로 테스트하세요)
+            ef_auto   = coils[0] # M0200 (에뮬: 201)
+            ef_manual = coils[1] # M0201 (에뮬: 202)
+            ef_remote = coils[2] # M0202 (에뮬: 203)
+            ef_run    = coils[3] # M0203 (에뮬: 204) - 운전확인
+            ef_stop   = coils[4] # M0204 (에뮬: 205) - 정지확인
+            ef_trip   = coils[5] # M0205 (에뮬: 206) - 트립
+
+            # 🌟 [신규 로직] 현장 수동(ef_manual) 상태가 아니면 수동 기동 스위치 강제 OFF
+            if not ef_manual:
+                self.btn_EF_manual_run.setChecked(False)
+                self.btn_EF_manual_run.setText("수동 기동(OFF)")
+                self.btn_EF_manual_run.setStyleSheet(self.get_toggle_style(False))
+
             self.ef_graphic.set_fan_state(ef_run)
             self.update_lamp_ui(self.lbl_EF_run, ef_run, "가동중", "정지중", "#3498db")
             self.update_lamp_ui(self.lbl_EF_trip, ef_trip, "써멀 트립", "정상", "#e74c3c")
+            
+            # 🌟 [추가됨] 스위치 버튼에 PLC 상태(빨간불) 피드백 연동
+            self.update_selector_btn(self.btn_EF_auto, ef_auto)
+            self.update_selector_btn(self.btn_EF_manual, ef_manual)
+            self.update_selector_btn(self.btn_EF_remote, ef_remote)
+            self.update_selector_btn_stop(self.btn_EF_stop, ef_stop)
 
-        # SF (급기) 피드백 (M0209: 운전확인, M0211: 트립)
+        # --- 2. 급기휀(SF) 상태 피드백 반영 ---
         if len(coils) > 11:
-            sf_run = coils[9]  # M0209
-            sf_trip = coils[11]# M0211
+            sf_auto   = coils[6]  # M0206 (에뮬: 207)
+            sf_manual = coils[7]  # M0207 (에뮬: 208)
+            sf_remote = coils[8]  # M0208 (에뮬: 209)
+            sf_run    = coils[9]  # M0209 (에뮬: 210) - 운전확인
+            sf_stop   = coils[10] # M0210 (에뮬: 211) - 정지확인
+            sf_trip   = coils[11] # M0211 (에뮬: 212) - 트립
+
+            # 🌟 [신규 로직] 현장 수동(sf_manual) 상태가 아니면 수동 기동 스위치 강제 OFF
+            if not sf_manual:
+                self.btn_SF_manual_run.setChecked(False)
+                self.btn_SF_manual_run.setText("수동 기동(OFF)")
+                self.btn_SF_manual_run.setStyleSheet(self.get_toggle_style(False))
+
             self.sf_graphic.set_fan_state(sf_run)
             self.update_lamp_ui(self.lbl_SF_run, sf_run, "가동중", "정지중", "#3498db")
             self.update_lamp_ui(self.lbl_SF_trip, sf_trip, "써멀 트립", "정상", "#e74c3c")
-
-        # --- 2. 변압기(TR) 휀 상태 피드백 반영 ---
-        # TR1~3 휀 운전 확인 (M0212, M0213, M0214)
-        if len(coils) > 14:
-            tr_status_list = [coils[12], coils[13], coils[14]]
             
+            # 🌟 [추가됨] 스위치 버튼에 PLC 상태(빨간불) 피드백 연동
+            self.update_selector_btn(self.btn_SF_auto, sf_auto)
+            self.update_selector_btn(self.btn_SF_manual, sf_manual)
+            self.update_selector_btn(self.btn_SF_remote, sf_remote)
+            self.update_selector_btn_stop(self.btn_SF_stop, sf_stop)
+
+        # --- 3. 변압기(TR) 휀 상태 피드백 반영 ---
+        if len(coils) > 14:
+            tr_status_list = [coils[12], coils[13], coils[14]] # M0212, M0213, M0214
             for i, is_running in enumerate(tr_status_list, start=1):
                 graphic = getattr(self, f"tr{i}_graphic")
                 lbl = getattr(self, f"lbl_tr{i}_status")
-                
-                # 💡 [핵심] 실제 피드백이 들어왔을 때만 애니메이션이 돌아갑니다!
                 graphic.set_fan_state(is_running)
-                
                 lbl.setText("가동중 (동작확인)" if is_running else "정지중")
                 lbl.setStyleSheet(f"background-color: {'#3498db' if is_running else '#555'}; color: white; padding: 5px; font-weight: bold;")
 
+    def update_selector_btn_stop(self, btn, state):
+        """정지 버튼 - 정지 피드백(ON)일 때는 빨간색, 평상시(꺼짐)에는 파란색 계열로 변경"""
+        if state:
+            btn.setStyleSheet("background-color: #e74c3c; color: yellow; padding: 8px; font-weight: bold; border-radius: 4px; border: 2px solid white;")
+        else:
+            # 🌟 [수정됨] 과장님 요청대로 셀렉터가 선택되어 정지 상태가 풀리면 파란색으로 변경
+            btn.setStyleSheet("background-color: #2980b9; color: white; padding: 8px; font-weight: bold; border-radius: 4px;")
+            
+    # --------------------------------------------------------------------------
+    # 3. 🌟 [신규 헬퍼 함수] 버튼 색상 점등 처리기
+    # --------------------------------------------------------------------------
+    def update_selector_btn(self, btn, state):
+        """일반 셀렉터 버튼 (자동/수동/원격) - ON일 때 빨간색 바탕에 노란 글씨"""
+        if state:
+            btn.setStyleSheet("background-color: #c0392b; color: yellow; padding: 8px; font-weight: bold; border-radius: 4px; border: 2px solid white;")
+        else:
+            btn.setStyleSheet("background-color: #2980b9; color: white; padding: 8px; font-weight: bold; border-radius: 4px;")
+
+    def update_selector_btn_stop(self, btn, state):
+        """정지 버튼 전용 - ON(정지 상태)일 때 강렬한 빨간색, 평소엔 어두운 붉은색"""
+        if state:
+            btn.setStyleSheet("background-color: #e74c3c; color: yellow; padding: 8px; font-weight: bold; border-radius: 4px; border: 2px solid white;")
+        else:
+            btn.setStyleSheet("background-color: #922b21; color: #d0d3d4; padding: 8px; font-weight: bold; border-radius: 4px;")
+    
     def update_lamp_ui(self, label, state, on_text, off_text, on_color):
         """램프 색상 변경 헬퍼 함수"""
         if state:

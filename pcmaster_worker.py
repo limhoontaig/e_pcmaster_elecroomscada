@@ -88,7 +88,7 @@ def serial_receive_thread():
 
             통신성공_여부 = False
             수집데이터 = [0] * len(DATA_LABELS) 
-
+            '''
             # =============================================================
             # ⚡ [그룹 A] 전력 계전기 통신 (국번 6, 1, 2, 3) 
             # =============================================================
@@ -127,7 +127,7 @@ def serial_receive_thread():
                     수집데이터[41] = res_tr3.registers[6]; 수집데이터[42] = res_tr3.registers[8]; 수집데이터[43] = res_tr3.registers[10]
                     수집데이터[44] = res_tr3.registers[12]; 수집데이터[45] = res_tr3.registers[14]; 수집데이터[46] = res_tr3.registers[16]
                     수집데이터[47] = res_tr3.registers[20] / 1000.0  
-
+            '''
             # =============================================================
             # 🏭 [그룹 B] LS PLC 통신 (국번 5) - 새 메모리 맵 반영
             # =============================================================
@@ -188,7 +188,7 @@ def serial_receive_thread():
 
             now_time = time.time()
             if 통신성공_여부 and (now_time - last_db_save_time >= 58.0):
-                insert_raw_data(수집데이터)
+                # insert_raw_data(수집데이터)
                 last_db_save_time = now_time
 
             time.sleep(0.5)
