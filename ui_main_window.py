@@ -72,7 +72,6 @@ class SCADAWindow(QMainWindow):
         self.lbl_main_title = QLabel("래미안개포루체하임아파트 변전실 통합 SCADA 시스템")
         self.lbl_main_title.setAlignment(Qt.AlignCenter)
         self.lbl_main_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin: 5px 0;")
-        self.lbl_main_title.mouseDoubleClickEvent = self.open_ac_settings_dialog
         title_layout.addWidget(self.lbl_main_title)
 
         title_layout.addStretch() # 좌우 균형을 위한 스프링
@@ -108,7 +107,6 @@ class SCADAWindow(QMainWindow):
         
         lbl_date_title = QLabel("<b>선택 날짜:</b>")
         lbl_date_title.setStyleSheet("font-size: 14px; font-weight: bold;")
-        lbl_date_title.mouseDoubleClickEvent = self.open_tr_fan_settings_dialog
 
         self.btn_show_hmi = QPushButton("HMI 대시보드")
         self.btn_show_hmi.setStyleSheet("background-color: #f39c12; color: white; font-weight: bold; min-height: 35px;")

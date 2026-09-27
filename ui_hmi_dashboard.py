@@ -6,6 +6,7 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
 from tr_controller import TRFanSettingsDialog
 from ui_ventilation import VentilationSettingsDialog
+from ui_ac_settings import ACSettingsDialog
 
 import pcmaster_worker
 
@@ -119,6 +120,29 @@ class HMIDashboardWidget(QWidget):
         title_label.setFixedHeight(30)
         title_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #00FFCC;")
         top_layout.addWidget(title_label); top_layout.addStretch()
+
+        # 👇 3개의 셋팅 버튼 생성 및 스타일 적용
+        btn_style = """
+            QPushButton { background-color: #34495e; color: white; font-weight: bold; padding: 5px 15px; border-radius: 4px; border: 1px solid #2c3e50; }
+            QPushButton:hover { background-color: #2c3e50; border: 1px solid #1abc9c; }
+        """
+        btn_ac = QPushButton("❄️ 에어컨 세팅")
+        btn_vent = QPushButton("💨 환기 세팅")
+        btn_tr = QPushButton("⚡ 변압기 세팅")
+        
+        btn_ac.setStyleSheet(btn_style)
+        btn_vent.setStyleSheet(btn_style)
+        btn_tr.setStyleSheet(btn_style)
+        
+        # 버튼을 함수와 연결
+        btn_ac.clicked.connect(self.open_ac_settings_dialog)
+        btn_vent.clicked.connect(self.open_ventilation_settings_dialog)
+        btn_tr.clicked.connect(self.open_tr_settings_dialog)
+        
+        top_layout.addWidget(btn_ac)
+        top_layout.addWidget(btn_vent)
+        top_layout.addWidget(btn_tr)
+
         main_layout.addLayout(top_layout)
 
         mid_layout = QHBoxLayout()
@@ -646,4 +670,9 @@ class HMIDashboardWidget(QWidget):
     def open_ventilation_settings_dialog(self, event):
         """환기설비(급/배기) 외기 연동 스마트 제어 설정 다이얼로그 띄우기"""
         dialog = VentilationSettingsDialog(parent=self)
+        dialog.exec_()
+
+    def open_ac_settings_dialog(self, *args):
+        """에어컨 설정 다이얼로그 띄우기"""
+        dialog = ACSettingsDialog(parent=self)
         dialog.exec_()

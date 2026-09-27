@@ -12,7 +12,7 @@ class ACSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("⚙️ 에어컨 및 환기팬 종합 제어 (관리자 전용)")
         # 💡 내용이 많아졌으므로 세로 높이를 420에서 580으로 살짝 키웠습니다.
-        self.setFixedSize(380, 580)
+        self.setFixedSize(380, 300)
         self.config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
         self.config = configparser.ConfigParser()
         self.init_ui()
@@ -42,26 +42,9 @@ class ACSettingsDialog(QDialog):
         layout.addWidget(group_auto)
 
         # ---------------------------------------------------------
-        # 2. 환기팬 및 외기온도 연동 그룹 (💡 신규)
-        # ---------------------------------------------------------
-        group_fan = QGroupBox("환기팬(급/배기) 및 계절 온도 연동 설정")
-        fan_layout = QVBoxLayout()
-        
-        self.spin_fan_on = QDoubleSpinBox(); self.spin_fan_on.setRange(20.0, 50.0); self.spin_fan_on.setSingleStep(0.5)
-        self.spin_fan_off = QDoubleSpinBox(); self.spin_fan_off.setRange(15.0, 45.0); self.spin_fan_off.setSingleStep(0.5)
-        self.spin_supply_stop = QDoubleSpinBox(); self.spin_supply_stop.setRange(10.0, 40.0); self.spin_supply_stop.setSingleStep(0.5)
-
-        self.add_row(fan_layout, "배기 휀 가동 실내온도 (℃):", self.spin_fan_on)
-        self.add_row(fan_layout, "배기 휀 정지 실내온도 (℃):", self.spin_fan_off)
-        self.add_row(fan_layout, "급기 휀 강제차단 외기온도 (℃):", self.spin_supply_stop)
-        
-        group_fan.setLayout(fan_layout)
-        layout.addWidget(group_fan)
-
-        # ---------------------------------------------------------
         # 💡 통합 저장 버튼 (에어컨 + 환기팬 일괄 저장)
         # ---------------------------------------------------------
-        btn_save = QPushButton("💾 설정 통합 저장 및 PLC 반영")
+        btn_save = QPushButton("💾 설정 통합 저장")
         btn_save.setStyleSheet("font-weight: bold; background-color: #4CAF50; color: white; padding: 10px; margin-top: 5px;")
         btn_save.clicked.connect(self.save_settings)
         layout.addWidget(btn_save)
@@ -108,16 +91,7 @@ class ACSettingsDialog(QDialog):
                 self.spin_cold.setValue(self.config['AC_SETTINGS'].getfloat('COLD_WIND_TEMP', 26.0))
                 self.spin_hours.setValue(self.config['AC_SETTINGS'].getfloat('MAX_RUN_HOURS', 3.0))
             
-            # 신규 환기팬 설정값 로드
-            if 'FAN_SETTINGS' in self.config:
-                self.spin_fan_on.setValue(self.config['FAN_SETTINGS'].getfloat('FAN_ON', 30.0))
-                self.spin_fan_off.setValue(self.config['FAN_SETTINGS'].getfloat('FAN_OFF', 28.0))
-                self.spin_supply_stop.setValue(self.config['FAN_SETTINGS'].getfloat('SUPPLY_STOP', 25.0))
-            else:
-                self.spin_fan_on.setValue(30.0)
-                self.spin_fan_off.setValue(28.0)
-                self.spin_supply_stop.setValue(25.0)
-
+            
     def save_settings(self):
         # 1. 환기팬 온도 유효성 검사
         if self.spin_fan_off.value() >= self.spin_fan_on.value():
@@ -133,30 +107,16 @@ class ACSettingsDialog(QDialog):
         self.config['AC_SETTINGS']['COLD_WIND_TEMP'] = str(self.spin_cold.value())
         self.config['AC_SETTINGS']['MAX_RUN_HOURS'] = str(self.spin_hours.value())
 
-        if 'FAN_SETTINGS' not in self.config:
-            self.config['FAN_SETTINGS'] = {}
-        self.config['FAN_SETTINGS']['FAN_ON'] = str(self.spin_fan_on.value())
-        self.config['FAN_SETTINGS']['FAN_OFF'] = str(self.spin_fan_off.value())
-        self.config['FAN_SETTINGS']['SUPPLY_STOP'] = str(self.spin_supply_stop.value())
-
         with open(self.config_path, 'w', encoding='utf-8') as f:
             self.config.write(f)
         
         # 3. 에어컨 매니저 자동 업데이트
         ac_manager.load_settings()
 
-        # 4. 💡 PLC로 환기팬 설정값 비동기 전송 (소수점 1자리 제거를 위해 * 10)
-        plc_fan_values = [
-            int(self.spin_fan_on.value() * 10),       # D2020: 배기 휀 가동
-            int(self.spin_fan_off.value() * 10),      # D2021: 배기 휀 정지
-            int(self.spin_supply_stop.value() * 10)   # D2022: 급기 휀 강제 차단 외기온도
-        ]
-        pcmaster_worker.pending_ac_fan_values = plc_fan_values
-
         QMessageBox.information(
             self, 
             "저장 완료", 
-            "에어컨 타이머 설정이 파이썬에 반영되었으며,\n환기팬(급/배기) 설정값이 PLC 통신 대기열에 등록되었습니다."
+            "에어컨 타이머 설정이 파이썬에 반영되었습니다."
         )
         self.accept() # 완료 후 자동으로 창을 닫아줍니다.
 
