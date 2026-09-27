@@ -46,6 +46,7 @@ class CommSignal(QObject):
 comm_signal = CommSignal()
 last_db_save_time = 0
 pending_ac_fan_values = None
+pending_tr_fan_values = None
 
 tr1_buffer = []
 tr2_buffer = []
@@ -68,7 +69,7 @@ def write_plc_register(address, value):
         print(f"🌡️ [워드 제어] D{address:04d} 번지에 설정값 {value} 전송 완료")
 
 def serial_receive_thread():
-    global last_db_save_time, pending_ac_fan_values
+    global last_db_save_time, pending_ac_fan_values, pending_tr_fan_values
     global tr1_buffer, tr2_buffer, tr3_buffer, last_max_calc_time
     
     current_status = None
@@ -133,6 +134,14 @@ def serial_receive_thread():
             # 🏭 [그룹 B] LS PLC 통신 (국번 5) - 새 메모리 맵 반영
             # =============================================================
             if client_plc.is_socket_open():
+                # 👇 2. 여기에 다이얼로그에서 넘어온 설정값을 PLC로 쏘는 로직을 추가합니다.
+                if pending_tr_fan_values is not None:
+                    # D900번지부터 6개의 값을 한 번에 전송 (Write Multiple Registers)
+                    safe_modbus_call(client_plc.write_registers, address=900, values=pending_tr_fan_values, slave_id=5)
+                    print(f"✅ [워드 제어] D0900~0905 번지에 온도 설정값 {pending_tr_fan_values} 전송 완료")
+                    # 전송 완료 후 메모장 비우기
+                    pending_tr_fan_values = None                
+                
                 # 상태 비트 (M0200 ~ M0222) 읽어오기
                 res_coils = safe_modbus_call(client_plc.read_coils, address=200, count=23, slave_id=5)
                 if res_coils and not res_coils.isError():
