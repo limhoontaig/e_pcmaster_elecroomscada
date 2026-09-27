@@ -595,26 +595,16 @@ class HMIDashboardWidget(QWidget):
                 lbl.setStyleSheet(f"background-color: {'#3498db' if is_running else '#555'}; color: white; padding: 5px; font-weight: bold;")
 
     def update_plc_data(self, data):
-        # 🟢 1. 워커에서 UI로 넘어온 원본 데이터를 그대로 출력해 봅니다.
-        print(f"\n📥 [UI 데이터 수신]: {data}")
-        
         lower_labels = {k.lower(): v for k, v in self.data_labels.items()}
         
-        # 🟢 2. UI에 현재 만들어진 라벨들의 키 목록을 출력해 봅니다. 
-        # (들어온 데이터의 키와 어떻게 다른지 비교하기 위함입니다)
-        # print(f"🏷️ [UI 라벨 키 목록]: {list(lower_labels.keys())}") 
-
         for key, value in data.items():
             lower_key = key.lower()
             
             if lower_key in lower_labels:
-                # 🟢 3. 키 매핑이 성공해서 화면에 글씨를 쓰기 직전의 상태를 확인합니다.
-                print(f"✅ [화면 갱신 성공]: {key} -> {value}")
                 formatted_value = f"{value:.1f}" if isinstance(value, float) else str(value)
                 lower_labels[lower_key].setText(formatted_value)
             else:
-                # 🔴 4. 통신으로 데이터는 왔는데 화면에 매핑할 라벨을 못 찾았을 때 출력합니다.
-                print(f"❌ [매핑 실패 - 라벨 못찾음]: {key}")
+                pass
 
     # --------------------------------------------------------------------------
     # 버튼 색상 점등 처리기
