@@ -47,6 +47,7 @@ comm_signal = CommSignal()
 last_db_save_time = 0
 pending_ac_fan_values = None
 pending_tr_fan_values = None
+vent_settings = None
 
 tr1_buffer = []
 tr2_buffer = []
@@ -185,6 +186,35 @@ def serial_receive_thread():
                     }
                     # 만들어진 딕셔너리를 UI로 전송
                     comm_signal.plc_data_update.emit(ui_data_dict)
+
+                    # 🌟 [스마트 환기 제어 판단 로직]
+                    if vent_settings is not None:
+                        out_temp = 수집데이터[1] # 실시간 외기 온도
+                        
+                        # 1) 구간 판단
+                        if out_temp < 16.0:
+                            target_on = vent_settings['w_on']
+                            target_off = vent_settings['w_off']
+                        elif out_temp < 25.0:
+                            target_on = vent_settings['sp_on']
+                            target_off = vent_settings['sp_off']
+                        else:
+                            target_on = vent_settings['su_on']
+                            target_off = vent_settings['su_off']
+                            
+                        target_supply_stop = vent_settings['supply_stop']
+                        target_supply_start = vent_settings['supply_start'] # 🌟 신규 값 가져오기
+
+                        # 2) 💡 메모리맵 일치: D906, D907, D908, D909 순서로 4개의 데이터 배열 생성
+                        plc_vent_targets = [
+                            int(target_on * 10),           # D00906: Room Temp High Set (배기기동)
+                            int(target_off * 10),          # D00907: Room Temp Low Set  (배기정지)
+                            int(target_supply_stop * 10),  # D00908: Outdoor Temp High Set (급기중지)
+                            int(target_supply_start * 10)  # D00909: Outdoor Temp Low Set  (급기가동)
+                        ]
+                        
+                        # 3) 시작 주소를 906으로 지정하여 4개의 배열 쏘기
+                        safe_modbus_call(client_plc.write_registers, address=906, values=plc_vent_targets, slave_id=5)
                     
                     # 🌟 [수정됨] 1분(60초) 변압기 최대 온도 연산 및 전송 (D00980 ~ D00982)
                     now_t = time.time()

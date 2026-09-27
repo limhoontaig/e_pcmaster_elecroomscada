@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
 from tr_controller import TRFanSettingsDialog
+from ui_ventilation import VentilationSettingsDialog
 
 import pcmaster_worker
 
@@ -177,7 +178,7 @@ class HMIDashboardWidget(QWidget):
         lbl_title = QLabel("<h3 style='color:#f39c12; margin:0;'>💨 환기설비 (SF/EF) 현황 및 제어</h3>")
         lbl_title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         lbl_title.setAlignment(Qt.AlignCenter)
-        #lbl_title.mouseDoubleClickEvent = self.open_ventilation_settings_dialog
+        lbl_title.mouseDoubleClickEvent = self.open_ventilation_settings_dialog
         layout.addWidget(lbl_title)
 
         equip_layout = QHBoxLayout()
@@ -640,4 +641,9 @@ class HMIDashboardWidget(QWidget):
         # 현재 화면에 표시된 온도나 설정된 온도를 읽어와서 다이얼로그 초기값으로 줄 수 있습니다.
         # 여기서는 기본값으로 띄웁니다.
         dialog = TRFanSettingsDialog(parent=self)
+        dialog.exec_()
+
+    def open_ventilation_settings_dialog(self, event):
+        """환기설비(급/배기) 외기 연동 스마트 제어 설정 다이얼로그 띄우기"""
+        dialog = VentilationSettingsDialog(parent=self)
         dialog.exec_()
