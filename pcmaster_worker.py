@@ -41,6 +41,7 @@ BAUD_RATE = 19200
 class CommSignal(QObject):
     status_changed = pyqtSignal(bool)
     plc_status_update = pyqtSignal(list)
+    plc_data_update = pyqtSignal(dict)
 
 comm_signal = CommSignal()
 last_db_save_time = 0
@@ -150,6 +151,31 @@ def serial_receive_thread():
                     수집데이터[26] = res_plc.registers[4] / 10.0    # D00954: Tr1_Temp
                     수집데이터[37] = res_plc.registers[5] / 10.0    # D00955: Tr2_Temp
                     수집데이터[48] = res_plc.registers[6] / 10.0    # D00956: Tr3_Temp
+
+                    # 👇 신규 추가: UI에 데이터를 넘기기 위한 딕셔너리 생성 및 전송
+                    ui_data_dict = {
+                        # 🌡️ 온도 데이터 (현재 PLC에서 정상 수집 중)
+                        'Tr1_Temp': 수집데이터[26],
+                        'Tr2_Temp': 수집데이터[37],
+                        'Tr3_Temp': 수집데이터[48],
+                        
+                        # ⚡ TR-1 전기 데이터 (나중에 주석 풀면 자동 반영됨)
+                        'Tr1_V_R_S': 수집데이터[22],
+                        'Tr1_A_R': 수집데이터[16],
+                        'Tr1_P_kW': 수집데이터[25],
+                        
+                        # ⚡ TR-2 전기 데이터 (나중에 주석 풀면 자동 반영됨)
+                        'Tr2_V_R_S': 수집데이터[33],
+                        'Tr2_A_R': 수집데이터[27],
+                        'Tr2_P_kW': 수집데이터[36],
+                        
+                        # ⚡ TR-3 전기 데이터 (나중에 주석 풀면 자동 반영됨)
+                        'Tr3_V_R_S': 수집데이터[44],
+                        'Tr3_A_R': 수집데이터[38],
+                        'Tr3_P_kW': 수집데이터[47],
+                    }
+                    # 만들어진 딕셔너리를 UI로 전송
+                    comm_signal.plc_data_update.emit(ui_data_dict)
                     
                     # 🌟 [수정됨] 1분(60초) 변압기 최대 온도 연산 및 전송 (D00980 ~ D00982)
                     now_t = time.time()

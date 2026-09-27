@@ -110,6 +110,7 @@ if __name__ == "__main__":
         # ⭐ [누락된 부분 추가] pcmaster_worker의 시그널을 화면의 상태 변경 함수와 연결합니다!
         import pcmaster_worker
         pcmaster_worker.comm_signal.status_changed.connect(win.update_rs485_status)
+        pcmaster_worker.comm_signal.plc_data_update.connect(win.hmi_dashboard.update_plc_data)
         # =================================================================
         
         # 최상단 고정으로 메인 화면 표시

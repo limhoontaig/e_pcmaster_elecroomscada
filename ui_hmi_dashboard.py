@@ -144,19 +144,23 @@ class HMIDashboardWidget(QWidget):
             grid.addWidget(lbl, 0, col)
 
         self.data_labels = {}
-        rows_config = [("TR-1 (1,000kVA)", "1"), ("TR-2 (1,250kVA)", "2"), ("TR-3 (1,250kVA)", "3")]
+        # DB 컬럼 명명 규칙에 맞게 접두어(Tr1, Tr2, Tr3) 추가
+        rows_config = [("TR-1 (1,000kVA)", "1", "Tr1"), ("TR-2 (1,250kVA)", "2", "Tr2"), ("TR-3 (1,250kVA)", "3", "Tr3")]
         keys = ["v", "a", "kw", "load", "temp"]
+        # 통신/DB 데이터 딕셔너리의 실제 키 이름 (전압은 선간전압 V_R_S를 표시한다고 가정)
+        db_keys = ["V_R_S", "A_R", "P_kW", "load", "Temp"] 
         colors = ["#3498db", "#f1c40f", "#e67e22", "#e74c3c", "#2ecc71"]
 
-        for row_idx, (tr_name, tr_num) in enumerate(rows_config, start=1):
+        for row_idx, (tr_name, tr_num, db_prefix) in enumerate(rows_config, start=1):
             r_lbl = QLabel(tr_name)
             r_lbl.setAlignment(Qt.AlignCenter)
             r_lbl.setStyleSheet("background-color: #1a1a1a; font-weight: bold; padding: 5px; border: 1px solid #444;")
             grid.addWidget(r_lbl, row_idx, 0)
             
-            for col_idx, key in enumerate(keys):
+            for col_idx, (key, db_key) in enumerate(zip(keys, db_keys)):
                 color = colors[col_idx]
-                label_key = f"tr{tr_num}_{key}"
+                # 부하율(load)은 DB 컬럼에 없으므로 기존 방식 유지, 나머지는 DB 키 방식 적용
+                label_key = f"{db_prefix}_{db_key}" if key != "load" else f"tr{tr_num}_load"
                 lcd = self.create_lcd_label("0.0", color)
                 self.data_labels[label_key] = lcd
                 grid.addWidget(lcd, row_idx, col_idx + 1)
@@ -559,6 +563,28 @@ class HMIDashboardWidget(QWidget):
                 graphic.set_fan_state(is_running)
                 lbl.setText("가동중" if is_running else "정지중")
                 lbl.setStyleSheet(f"background-color: {'#3498db' if is_running else '#555'}; color: white; padding: 5px; font-weight: bold;")
+
+    def update_plc_data(self, data):
+        # 🟢 1. 워커에서 UI로 넘어온 원본 데이터를 그대로 출력해 봅니다.
+        print(f"\n📥 [UI 데이터 수신]: {data}")
+        
+        lower_labels = {k.lower(): v for k, v in self.data_labels.items()}
+        
+        # 🟢 2. UI에 현재 만들어진 라벨들의 키 목록을 출력해 봅니다. 
+        # (들어온 데이터의 키와 어떻게 다른지 비교하기 위함입니다)
+        # print(f"🏷️ [UI 라벨 키 목록]: {list(lower_labels.keys())}") 
+
+        for key, value in data.items():
+            lower_key = key.lower()
+            
+            if lower_key in lower_labels:
+                # 🟢 3. 키 매핑이 성공해서 화면에 글씨를 쓰기 직전의 상태를 확인합니다.
+                print(f"✅ [화면 갱신 성공]: {key} -> {value}")
+                formatted_value = f"{value:.1f}" if isinstance(value, float) else str(value)
+                lower_labels[lower_key].setText(formatted_value)
+            else:
+                # 🔴 4. 통신으로 데이터는 왔는데 화면에 매핑할 라벨을 못 찾았을 때 출력합니다.
+                print(f"❌ [매핑 실패 - 라벨 못찾음]: {key}")
 
     # --------------------------------------------------------------------------
     # 버튼 색상 점등 처리기
