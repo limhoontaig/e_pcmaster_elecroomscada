@@ -44,38 +44,56 @@ class ACController:
     def send_ir_task(self, ip_address, hex_code):
         if self.SIMULATION_MODE:
             print(f"   [시뮬레이션] {ip_address}로 IR 신호 전송 완료")
-            return
+            return True
         try:
             device = broadlink.hello(ip_address)
             device.auth()
             packet = bytes.fromhex(hex_code)
             device.send_data(packet)
             print(f"[IR 발사 성공] 대상 IP: {ip_address}")
+            return True # 🌟 성공 시 True 반환
         except Exception as e:
             print(f"[IR 발사 실패] ({ip_address}): {e}")
+            return False # 🌟 실패 시 False 반환
 
     def force_manual_control(self, action):
         current_time = time.time()
+        
         if action == "ON_1":
-            print("\n[수동 제어] 1호기 강제 가동 및 환기팬 정지!")
-            threading.Thread(target=self.send_ir_task, args=(self.HUB1_IP, self.IR_TURN_ON_29C)).start()
-            self.lead_ac = 1
-            self.fan_control_cmd = 1          
-            self.ac_state = "COOLING_1"       
-            self.ac_start_time = current_time 
+            print("\n[수동 제어] 1호기 강제 가동 및 환기팬 정지 시도...")
+            # 🌟 스레드를 쓰지 않고 직접 실행하여 결과를 기다림
+            if self.send_ir_task(self.HUB1_IP, self.IR_TURN_ON_29C):
+                self.lead_ac = 1
+                self.fan_control_cmd = 1          
+                self.ac_state = "COOLING_1"       
+                self.ac_start_time = current_time 
+                return True
+            return False
+
         elif action == "ON_2":
-            print("\n[수동 제어] 2호기 강제 가동 및 환기팬 정지!")
-            threading.Thread(target=self.send_ir_task, args=(self.HUB2_IP, self.IR_TURN_ON_29C)).start()
-            self.lead_ac = 2
-            self.fan_control_cmd = 1         
-            self.ac_state = "COOLING_1"      
-            self.ac_start_time = current_time
+            print("\n[수동 제어] 2호기 강제 가동 및 환기팬 정지 시도...")
+            if self.send_ir_task(self.HUB2_IP, self.IR_TURN_ON_29C):
+                self.lead_ac = 2
+                self.fan_control_cmd = 1         
+                self.ac_state = "COOLING_1"      
+                self.ac_start_time = current_time
+                return True
+            return False
+
         elif action == "OFF_ALL":
-            print("\n[수동 제어] 전호기 강제 정지 및 환기팬 자동 복귀!")
-            threading.Thread(target=self.send_ir_task, args=(self.HUB1_IP, self.IR_TURN_OFF)).start()
-            threading.Thread(target=self.send_ir_task, args=(self.HUB2_IP, self.IR_TURN_OFF)).start()
-            self.fan_control_cmd = 0         
-            self.ac_state = "STANDBY"        
+            print("\n[수동 제어] 전호기 강제 정지 및 환기팬 자동 복귀 시도...")
+            # 🌟 두 허브에 모두 정지 명령을 보냄
+            res1 = self.send_ir_task(self.HUB1_IP, self.IR_TURN_OFF)
+            res2 = self.send_ir_task(self.HUB2_IP, self.IR_TURN_OFF)
+            
+            if res1 or res2: # 둘 중 하나라도 성공하면 상태는 갱신
+                self.fan_control_cmd = 0         
+                self.ac_state = "STANDBY"
+                if res1 and res2:
+                    return True # 완전 성공
+                else:
+                    return "PARTIAL" # 하나만 성공 (부분 성공)
+            return False # 둘 다 실패        
 
     def check_and_control(self, indoor_temp, outdoor_temp, dis_temp1, dis_temp2, total_load):
         if indoor_temp is None: return

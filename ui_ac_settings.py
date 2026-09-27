@@ -93,9 +93,13 @@ class ACSettingsDialog(QDialog):
             
             
     def save_settings(self):
-        # 1. 환기팬 온도 유효성 검사
-        if self.spin_fan_off.value() >= self.spin_fan_on.value():
-            QMessageBox.warning(self, "설정 오류", "환기팬 '정지 실내온도'는 '가동 실내온도'보다 낮아야 합니다!")
+        # 1. 에어콘 제어 온도 유효성 검사
+        if not (self.spin_stop.value() < self.spin_start1.value() < self.spin_start2.value()):
+            QMessageBox.warning(
+                self, 
+                "설정 오류", 
+                "온도 설정이 잘못되었습니다!\n반드시 [정지 온도] < [1차 기동 온도] < [2차 기동 온도] 순서로 점점 높게 설정해야 합니다."
+            )
             return
 
         # 2. Config 저장 (다음 실행 시 값을 기억하기 위함)
