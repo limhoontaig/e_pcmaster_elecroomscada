@@ -4,6 +4,8 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QSizePolicy, QMessageBox)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
+from tr_controller import TRFanSettingsDialog
+
 import pcmaster_worker
 
 # ==============================================================================
@@ -174,6 +176,8 @@ class HMIDashboardWidget(QWidget):
         
         lbl_title = QLabel("<h3 style='color:#f39c12; margin:0;'>💨 환기설비 (SF/EF) 현황 및 제어</h3>")
         lbl_title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        lbl_title.setAlignment(Qt.AlignCenter)
+        #lbl_title.mouseDoubleClickEvent = self.open_ventilation_settings_dialog
         layout.addWidget(lbl_title)
 
         equip_layout = QHBoxLayout()
@@ -350,6 +354,7 @@ class HMIDashboardWidget(QWidget):
         lbl_title = QLabel("<h3 style='color:#3498db; margin:0;'>⚡ 변압기(TR) 현황 및 휀 제어</h3>")
         lbl_title.setAlignment(Qt.AlignCenter)
         lbl_title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        lbl_title.mouseDoubleClickEvent = self.open_tr_settings_dialog
         layout.addWidget(lbl_title)
 
         # 1. TR 그래픽 및 가동상태 (TR1, TR2, TR3)
@@ -626,3 +631,13 @@ class HMIDashboardWidget(QWidget):
             error_msg = f"장비와 통신할 수 없습니다.\n통신선 연결이나 포트 상태를 확인하세요.\n(상세 에러: {e})"
             print(f"⚠️ [통신 에러 차단] {error_msg}")
             QMessageBox.warning(self, "통신 오류", error_msg)
+
+    # ==========================================================================
+    # 다이얼로그 호출 함수 추가
+    # ==========================================================================
+    def open_tr_settings_dialog(self, event):
+        """TR 팬 온도 설정 다이얼로그 띄우기"""
+        # 현재 화면에 표시된 온도나 설정된 온도를 읽어와서 다이얼로그 초기값으로 줄 수 있습니다.
+        # 여기서는 기본값으로 띄웁니다.
+        dialog = TRFanSettingsDialog(parent=self)
+        dialog.exec_()
