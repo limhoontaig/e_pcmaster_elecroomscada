@@ -1,10 +1,9 @@
 # ui_hmi_dashboard.py
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
                              QLabel, QGroupBox, QPushButton, QFrame, QSplitter, 
-                             QSizePolicy, QMessageBox) # 🌟 QMessageBox 추가
+                             QSizePolicy, QMessageBox)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
-
 import pcmaster_worker
 
 # ==============================================================================
@@ -14,7 +13,6 @@ class FanGraphicWidget(QWidget):
     def __init__(self, parent=None, fan_type="TR"):
         super().__init__(parent)
         self.setMinimumSize(120, 110)
-        # 👇 이 부분을 추가하여 그래픽이 공간을 차지하게 만듭니다.
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding) 
         self.is_running = False
         self.angle = 0
@@ -84,7 +82,7 @@ class HMIDashboardWidget(QWidget):
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 5, 10, 5) 
-        main_layout.setSpacing(5) # 레이아웃 간의 세로 간격 축소
+        main_layout.setSpacing(5) 
 
         self.plc_addresses = {
             "tr_cooling_auto": 100,      
@@ -107,8 +105,11 @@ class HMIDashboardWidget(QWidget):
             "SF_stop": 113,              
             "SF_trip_reset": 114,        
         }
+
+        # 👇 여기에 수동 모드 상태를 기록할 변수 두 줄을 추가합니다.
+        self.is_ef_manual = False
+        self.is_sf_manual = False
         
-        # 🌟 타이틀 레이아웃 여백 최소화로 상부 공간 절약
         top_layout = QHBoxLayout()
         top_layout.setContentsMargins(0, 0, 0, 0)
         title_label = QLabel("⚡ 전기실 통합 제어 대시보드 (환기/변압기)")
@@ -122,7 +123,7 @@ class HMIDashboardWidget(QWidget):
         
         vent_panel = self.create_ventilation_panel()
         tr_panel = self.create_transformer_panel()
-        # 🌟 [해결 1] 양쪽 패널이 내부 컨텐츠 크기로 인해 5:5 비율을 깨지 못하도록 강제
+        
         vent_panel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         tr_panel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         mid_layout.addWidget(vent_panel, 1)
@@ -164,7 +165,6 @@ class HMIDashboardWidget(QWidget):
 
     def create_ventilation_panel(self):
         frame = QFrame()
-        # 🌟 [해결 2] QFrame에만 테두리를 그리도록 지정하여 제목(QLabel)에 박스가 생기는 현상 방지
         frame.setStyleSheet("QFrame { background-color: #111111; border: 1px solid #333; }")
         layout = QVBoxLayout(frame)
         
@@ -196,11 +196,13 @@ class HMIDashboardWidget(QWidget):
         
         run_lamp = QPushButton("정지중")
         run_lamp.setCursor(QCursor(Qt.PointingHandCursor))
+        run_lamp.setFixedHeight(40)
         run_lamp.setStyleSheet("background-color: #555; color: white; padding: 5px; font-weight: bold; border-radius: 3px; border: 1px solid #222;")
         run_lamp.clicked.connect(lambda: self.on_system_stop_clicked(prefix))
         
         trip_lamp = QPushButton("정상")
         trip_lamp.setCursor(QCursor(Qt.PointingHandCursor))
+        trip_lamp.setFixedHeight(40)
         trip_lamp.setStyleSheet("background-color: #27ae60; color: white; padding: 5px; font-weight: bold; border-radius: 3px; border: 1px solid #222;")
         trip_lamp.clicked.connect(lambda: self.on_thermal_reset_clicked(prefix))
         
@@ -211,24 +213,33 @@ class HMIDashboardWidget(QWidget):
         lamp_layout.addWidget(trip_lamp)
         glayout.addLayout(lamp_layout, 0)
 
-        glayout.addWidget(QLabel("<b>[제어 스위치]</b>"))
+        ctrl_lbl = QLabel("<b>[제어 스위치]</b>")
+        ctrl_lbl.setFixedHeight(40)
+        ctrl_lbl.setAlignment(Qt.AlignCenter)
+        glayout.addWidget(ctrl_lbl)
+        
         btn_layout = QGridLayout()
         btn_layout.setHorizontalSpacing(8)
         btn_layout.setVerticalSpacing(8)
         
-        # 🌟 [해결 3] 버튼의 픽셀 폭 고정 대신, 세 칸의 비율을 무조건 1:1:1로 동일하게 강제 (출렁임 완벽 차단)
         btn_layout.setColumnStretch(0, 1)
         btn_layout.setColumnStretch(1, 1)
         btn_layout.setColumnStretch(2, 1)
         
-        btn_remote = self.create_momentary_button("방재실운전", f"{prefix}_op_room_start")
+        btn_remote = self.create_momentary_button("방재실", f"{prefix}_op_room_start")
         btn_auto = self.create_momentary_button("현장 자동", f"{prefix}_local_auto_start")
         btn_manual = self.create_momentary_button("현장 수동", f"{prefix}_local_manual_start")
-        btn_stop = self.create_momentary_button("정 지", f"{prefix}_stop", color_type="danger")
+        btn_stop = self.create_momentary_button("정   지", f"{prefix}_stop", color_type="danger")
 
         btn_manual_run = QPushButton("수동 기동")
         btn_manual_run.setCheckable(True)
-        # setMinimumWidth(110) 삭제됨 (그리드가 알아서 1/3씩 분배)
+        
+        btn_remote.setFixedHeight(40)
+        btn_auto.setFixedHeight(40)
+        btn_manual.setFixedHeight(40)
+        btn_stop.setFixedHeight(40)
+        btn_manual_run.setFixedHeight(40)
+
         btn_manual_run.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         btn_manual_run.setStyleSheet(self.get_toggle_style(False))
         btn_manual_run.clicked.connect(lambda checked, p=prefix: self.on_manual_run_toggled(p, checked))
@@ -253,13 +264,28 @@ class HMIDashboardWidget(QWidget):
 
     def get_toggle_style(self, is_on):
         if is_on:
-            return "background-color: #d35400; color: yellow; padding: 8px; font-weight: bold; border-radius: 4px; border: 2px solid white;"
+            return "background-color: #d35400; color: yellow; font-weight: bold; border-radius: 4px; border: 2px solid white;"
         else:
-            return "background-color: #34495e; color: #bdc3c7; padding: 8px; font-weight: bold; border-radius: 4px; border: 2px solid transparent;"
+            return "background-color: #34495e; color: #bdc3c7; font-weight: bold; border-radius: 4px; border: 2px solid transparent;"
 
     def on_manual_run_toggled(self, prefix, checked):
+        # 👇 1. 접두어(EF/SF)에 맞는 수동 모드 상태 변수를 가져옵니다.
+        is_manual = getattr(self, f"is_{prefix.lower()}_manual", False)
+        
         btn = getattr(self, f"btn_{prefix}_manual_run")
-        btn.setText("수동 기동(ON)" if checked else "수동 기동(OFF)")
+
+        # 👇 2. 수동 모드가 아닌데 켜기(ON)를 시도할 경우 원천 차단합니다.
+        if checked and not is_manual:
+            QMessageBox.warning(self, "조작 불가", f"[{prefix}] 현장 수동 모드가 아닙니다.\n먼저 '현장 수동' 버튼을 눌러 모드를 전환하세요.")
+            # 버튼 상태를 강제로 원상복구 (시그널 무한 루프 방지)
+            btn.blockSignals(True) 
+            btn.setChecked(False)
+            btn.setStyleSheet(self.get_toggle_style(False))
+            btn.blockSignals(False)
+            return # 여기서 함수를 종료하여 통신 신호가 나가는 것을 막습니다.
+
+        # 정상적인 경우 (수동 모드이거나, 끄는 동작일 때)
+        btn.setText("수동 운전" if checked else "수동 정지")
         btn.setStyleSheet(self.get_toggle_style(checked))
         
         signal_name = f"{prefix}_local_manual_start_sw"
@@ -292,12 +318,12 @@ class HMIDashboardWidget(QWidget):
         btn = QPushButton(text)
         if color_type == "danger":
             btn.setStyleSheet("""
-                QPushButton { background-color: #c0392b; color: white; padding: 8px; font-weight: bold; border-radius: 4px; border: 2px solid transparent; }
+                QPushButton { background-color: #c0392b; color: white; font-weight: bold; border-radius: 4px; border: 2px solid transparent; }
                 QPushButton:pressed { background-color: #e74c3c; border: 2px solid white; }
             """)
         else:
             btn.setStyleSheet("""
-                QPushButton { background-color: #2980b9; color: white; padding: 8px; font-weight: bold; border-radius: 4px; border: 2px solid transparent; }
+                QPushButton { background-color: #2980b9; color: white; font-weight: bold; border-radius: 4px; border: 2px solid transparent; }
                 QPushButton:pressed { background-color: #3498db; border: 2px solid white; }
             """)
         
@@ -314,18 +340,29 @@ class HMIDashboardWidget(QWidget):
     # ==========================================================================
     def create_transformer_panel(self):
         frame = QFrame()
-        # 🌟 [해결 2] QFrame 지정으로 제목에 상자 그려짐 방지
         frame.setStyleSheet("QFrame { background-color: #111111; border: 1px solid #333; }")
         layout = QVBoxLayout(frame)
         
         lbl_title = QLabel("<h3 style='color:#3498db; margin:0;'>⚡ 변압기(TR) 현황 및 휀 제어</h3>")
+        lbl_title.setAlignment(Qt.AlignCenter)
         lbl_title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         layout.addWidget(lbl_title)
 
+        # 1. TR 그래픽 및 가동상태 (TR1, TR2, TR3)
+        tr_layout = QHBoxLayout()
+        self.tr1_graphic, self.lbl_tr1_status = self.create_tr_panel("TR-1", tr_layout)
+        self.tr2_graphic, self.lbl_tr2_status = self.create_tr_panel("TR-2", tr_layout)
+        self.tr3_graphic, self.lbl_tr3_status = self.create_tr_panel("TR-3", tr_layout)
+        layout.addLayout(tr_layout, 1) 
+
+        # 2. 통합 제어 스위치 영역
+        ctrl_lbl = QLabel("<b>[제어 스위치]</b>")
+        ctrl_lbl.setFixedHeight(40)
+        ctrl_lbl.setAlignment(Qt.AlignCenter)
+        layout.addWidget(ctrl_lbl, 0)
+
         ctrl_layout = QGridLayout()
         ctrl_layout.setSpacing(8)
-        
-        # 🌟 [해결 3] 열 비율 1:1:1 고정
         ctrl_layout.setColumnStretch(0, 1)
         ctrl_layout.setColumnStretch(1, 1)
         ctrl_layout.setColumnStretch(2, 1)
@@ -333,27 +370,38 @@ class HMIDashboardWidget(QWidget):
         self.btn_master = QPushButton("전체 냉각설비 가동중")
         self.btn_master.setCheckable(True); self.btn_master.setChecked(True)
         self.btn_master.setStyleSheet(self.get_master_style(True))
-        self.btn_master.setMinimumHeight(45)
+        self.btn_master.setFixedHeight(40) # 환기설비와 통일
         self.btn_master.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_master.clicked.connect(self.on_master_toggled)
 
         self.btn_auto = QPushButton("자동 운전")
         self.btn_auto.setCheckable(True); self.btn_auto.setChecked(True)
         self.btn_auto.setStyleSheet(self.get_auto_manual_style(True))
-        self.btn_auto.setMinimumHeight(45)
+        self.btn_auto.setFixedHeight(40) # 환기설비와 통일
         self.btn_auto.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_auto.clicked.connect(self.on_auto_manual_toggled)
 
         self.btn_tr1 = self.create_toggle_button("TR-1 수동 OFF")
         self.btn_tr2 = self.create_toggle_button("TR-2 수동 OFF")
         self.btn_tr3 = self.create_toggle_button("TR-3 수동 OFF")
-        
+        self.btn_tr1.setFixedHeight(40) # 환기설비와 통일
+        self.btn_tr2.setFixedHeight(40)
+        self.btn_tr3.setFixedHeight(40)
+
+        # 1행: 마스터, 자동 버튼
         ctrl_layout.addWidget(self.btn_master, 0, 0, 1, 2)
         ctrl_layout.addWidget(self.btn_auto, 0, 2, 1, 1)
-
+        
+        # 2행: TR별 수동 버튼
         ctrl_layout.addWidget(self.btn_tr1, 1, 0)
         ctrl_layout.addWidget(self.btn_tr2, 1, 1)
         ctrl_layout.addWidget(self.btn_tr3, 1, 2)
+
+        layout.addLayout(ctrl_layout, 0)
+
+        self.btn_tr1.toggled.connect(lambda checked: self.update_tr_fan_status(1, checked))
+        self.btn_tr2.toggled.connect(lambda checked: self.update_tr_fan_status(2, checked))
+        self.btn_tr3.toggled.connect(lambda checked: self.update_tr_fan_status(3, checked))
 
         for btn in [self.btn_auto, self.btn_tr1, self.btn_tr2, self.btn_tr3]:
             sp = btn.sizePolicy()
@@ -361,48 +409,34 @@ class HMIDashboardWidget(QWidget):
             btn.setSizePolicy(sp)
 
         self.set_individual_buttons_enabled(False) 
-        layout.addLayout(ctrl_layout)
-
-        tr_layout = QHBoxLayout()
-        self.tr1_graphic, self.lbl_tr1_status = self.create_tr_panel("TR-1", tr_layout)
-        self.tr2_graphic, self.lbl_tr2_status = self.create_tr_panel("TR-2", tr_layout)
-        self.tr3_graphic, self.lbl_tr3_status = self.create_tr_panel("TR-3", tr_layout)
         
-        self.btn_tr1.toggled.connect(lambda checked: self.update_tr_fan_status(1, checked))
-        self.btn_tr2.toggled.connect(lambda checked: self.update_tr_fan_status(2, checked))
-        self.btn_tr3.toggled.connect(lambda checked: self.update_tr_fan_status(3, checked))
-
-        layout.addLayout(tr_layout)
         return frame
 
     def create_tr_panel(self, title, parent_layout):
         group = QGroupBox(title)
         group.setStyleSheet("QGroupBox { border: 1px solid #555; margin-top: 10px; font-weight: bold; } QGroupBox::title { subcontrol-origin: margin; left: 10px; }")
+        
         layout = QVBoxLayout(group)
+        layout.setSpacing(12) 
         
         graphic_widget = FanGraphicWidget(fan_type="TR")
-        
+        layout.addWidget(graphic_widget, 1)
+
         status_lbl = QLabel("정지중")
         status_lbl.setAlignment(Qt.AlignCenter)
-        # 👇 라벨의 세로 높이를 강제로 40픽셀로 고정하여 비대해지는 것을 막습니다.
         status_lbl.setFixedHeight(40) 
         status_lbl.setStyleSheet("background-color: #555; color: white; padding: 5px; font-weight: bold;")
-        
-        # 👇 위젯을 추가할 때 graphic에만 '1' (남는 공간 독식)을 부여합니다.
-        layout.addWidget(graphic_widget, 1)
         layout.addWidget(status_lbl, 0)
         
         parent_layout.addWidget(group)
         return graphic_widget, status_lbl
 
-    # 🌟 마스터 스위치 테두리 규격 추가
     def get_master_style(self, is_on):
         if is_on:
             return "background-color: #27ae60; color: white; padding: 10px; font-weight: bold; border-radius: 5px; border: 2px solid white;"
         else:
             return "background-color: #7f8c8d; color: white; padding: 10px; font-weight: bold; border-radius: 5px; border: 2px solid transparent;"
 
-    # 🌟 자동/수동 스위치 테두리 규격 추가
     def get_auto_manual_style(self, is_auto):
         if is_auto:
             return "background-color: #2980b9; color: white; padding: 10px; font-weight: bold; border-radius: 5px; border: 2px solid white;"
@@ -416,7 +450,6 @@ class HMIDashboardWidget(QWidget):
         
         self.safe_write_bit(101, is_on, "냉각설비 마스터")
 
-        # 🌟 하위 버튼 숨김 (공간은 RetainSizeWhenHidden에 의해 그대로 유지됨)
         for btn in [self.btn_auto, self.btn_tr1, self.btn_tr2, self.btn_tr3]:
             btn.setVisible(is_on)
             
@@ -425,6 +458,9 @@ class HMIDashboardWidget(QWidget):
             self.btn_tr1.setChecked(False)
             self.btn_tr2.setChecked(False)
             self.btn_tr3.setChecked(False)
+        else:
+            self.btn_auto.setChecked(True)
+            self.on_auto_manual_toggled()
 
     def on_auto_manual_toggled(self):
         is_auto = self.btn_auto.isChecked()
@@ -446,11 +482,10 @@ class HMIDashboardWidget(QWidget):
     def create_toggle_button(self, text):
         btn = QPushButton(text)
         btn.setCheckable(True) 
-        # setMinimumWidth(100) 삭제됨 (그리드가 알아서 1/3씩 분배)
         btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         btn.setStyleSheet("""
-            QPushButton { background-color: #34495e; color: white; border: 2px solid transparent; padding: 10px; border-radius: 5px; font-weight: bold; }
+            QPushButton { background-color: #34495e; color: white; border: 2px solid transparent; font-weight: bold; }
             QPushButton:hover { background-color: #3d566e; }
             QPushButton:checked { background-color: #c0392b; color: yellow; border: 2px solid white; } 
             QPushButton:disabled { background-color: #222222; color: #555555; border: 2px solid #333333; }
@@ -474,11 +509,13 @@ class HMIDashboardWidget(QWidget):
             ef_remote = coils[2] 
             ef_run    = coils[3] 
             ef_stop   = coils[4] 
-            ef_trip   = coils[5] 
+            ef_trip   = coils[5]
+
+            self.is_ef_manual = ef_manual 
 
             if not ef_manual:
                 self.btn_EF_manual_run.setChecked(False)
-                self.btn_EF_manual_run.setText("수동 기동(OFF)")
+                self.btn_EF_manual_run.setText("수동 정지")
                 self.btn_EF_manual_run.setStyleSheet(self.get_toggle_style(False))
 
             self.ef_graphic.set_fan_state(ef_run)
@@ -498,9 +535,11 @@ class HMIDashboardWidget(QWidget):
             sf_stop   = coils[10] 
             sf_trip   = coils[11] 
 
+            self.is_sf_manual = sf_manual
+
             if not sf_manual:
                 self.btn_SF_manual_run.setChecked(False)
-                self.btn_SF_manual_run.setText("수동 기동(OFF)")
+                self.btn_SF_manual_run.setText("수동 정지")
                 self.btn_SF_manual_run.setStyleSheet(self.get_toggle_style(False))
 
             self.sf_graphic.set_fan_state(sf_run)
@@ -518,7 +557,7 @@ class HMIDashboardWidget(QWidget):
                 graphic = getattr(self, f"tr{i}_graphic")
                 lbl = getattr(self, f"lbl_tr{i}_status")
                 graphic.set_fan_state(is_running)
-                lbl.setText("가동중 (동작확인)" if is_running else "정지중")
+                lbl.setText("가동중" if is_running else "정지중")
                 lbl.setStyleSheet(f"background-color: {'#3498db' if is_running else '#555'}; color: white; padding: 5px; font-weight: bold;")
 
     # --------------------------------------------------------------------------
@@ -560,5 +599,4 @@ class HMIDashboardWidget(QWidget):
         except Exception as e:
             error_msg = f"장비와 통신할 수 없습니다.\n통신선 연결이나 포트 상태를 확인하세요.\n(상세 에러: {e})"
             print(f"⚠️ [통신 에러 차단] {error_msg}")
-            # QMessageBox가 정상적으로 팝업을 띄웁니다.
             QMessageBox.warning(self, "통신 오류", error_msg)
