@@ -85,7 +85,7 @@ def serial_receive_thread():
             if not (client_relay.is_socket_open() or client_plc.is_socket_open()):
                 time.sleep(1)
                 continue
-
+            
             통신성공_여부 = False
             수집데이터 = [0] * len(DATA_LABELS) 
             '''
@@ -188,7 +188,7 @@ def serial_receive_thread():
 
             now_time = time.time()
             if 통신성공_여부 and (now_time - last_db_save_time >= 58.0):
-                # insert_raw_data(수집데이터)
+                insert_raw_data(수집데이터)
                 last_db_save_time = now_time
 
             time.sleep(0.5)
