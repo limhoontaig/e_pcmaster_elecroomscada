@@ -262,6 +262,10 @@ def serial_receive_thread():
             print(f"마스터 루프 에러: {e}")
             if client_relay: client_relay.close()
             if client_plc: client_plc.close()
+
+            comm_signal.status_changed.emit(False)
+            current_status = False
+
             time.sleep(1)
 
 def insert_raw_data(values):
