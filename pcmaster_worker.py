@@ -53,6 +53,7 @@ tr1_buffer = []
 tr2_buffer = []
 tr3_buffer = []
 last_max_calc_time = 0
+is_first_tr_send = True
 
 client_relay = ModbusSerialClient(port=COM_PORT_RELAY, baudrate=BAUD_RATE, timeout=0.3, stopbits=1, bytesize=8, parity='N')
 client_plc = ModbusSerialClient(port=COM_PORT_PLC, baudrate=BAUD_RATE, timeout=0.3, stopbits=1, bytesize=8, parity='N')
@@ -71,7 +72,7 @@ def write_plc_register(address, value):
 
 def serial_receive_thread():
     global last_db_save_time, pending_ac_fan_values, pending_tr_fan_values
-    global tr1_buffer, tr2_buffer, tr3_buffer, last_max_calc_time
+    global tr1_buffer, tr2_buffer, tr3_buffer, last_max_calc_time, is_first_tr_send
     
     current_status = None
     
@@ -91,7 +92,7 @@ def serial_receive_thread():
             
             통신성공_여부 = False
             수집데이터 = [0] * len(DATA_LABELS) 
-            '''
+            
             # =============================================================
             # ⚡ [그룹 A] 전력 계전기 통신 (국번 6, 1, 2, 3) 
             # =============================================================
@@ -130,7 +131,7 @@ def serial_receive_thread():
                     수집데이터[41] = res_tr3.registers[6]; 수집데이터[42] = res_tr3.registers[8]; 수집데이터[43] = res_tr3.registers[10]
                     수집데이터[44] = res_tr3.registers[12]; 수집데이터[45] = res_tr3.registers[14]; 수집데이터[46] = res_tr3.registers[16]
                     수집데이터[47] = res_tr3.registers[20] / 1000.0  
-            '''
+            
             # =============================================================
             # 🏭 [그룹 B] LS PLC 통신 (국번 5) - 새 메모리 맵 반영
             # =============================================================
@@ -222,13 +223,14 @@ def serial_receive_thread():
                     tr2_buffer.append(res_plc.registers[5])
                     tr3_buffer.append(res_plc.registers[6])
 
-                    if now_t - last_max_calc_time >= 60.0:
+                    if is_first_tr_send or (now_t - last_max_calc_time >= 60.0):
                         if tr1_buffer:
                             max_tr1 = max(tr1_buffer); max_tr2 = max(tr2_buffer); max_tr3 = max(tr3_buffer)
                             # 💡 바뀐 목적지 주소 980번으로 쏩니다.
                             safe_modbus_call(client_plc.write_registers, address=980, values=[max_tr1, max_tr2, max_tr3], slave_id=5)
                         tr1_buffer.clear(); tr2_buffer.clear(); tr3_buffer.clear()
                         last_max_calc_time = now_t
+                        is_first_tr_send = False
                 
                 # 에어컨 컨트롤러 로직 유지
                 if 통신성공_여부:
@@ -244,12 +246,10 @@ def serial_receive_thread():
             # =============================================================
             # [6] DB 로깅 (58초마다 기록)
             # =============================================================
-            if 통신성공_여부 and current_status != True:
+            if 통신성공_여부:
                 comm_signal.status_changed.emit(True)
-                current_status = True
-            elif not 통신성공_여부 and current_status != False:
+            else:
                 comm_signal.status_changed.emit(False)
-                current_status = False
 
             now_time = time.time()
             if 통신성공_여부 and (now_time - last_db_save_time >= 58.0):
