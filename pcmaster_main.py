@@ -131,5 +131,19 @@ if __name__ == "__main__":
     
     # 3. 백그라운드 초기화 작업 시작
     worker.start()
+
+    def cleanup_before_exit():
+        print("프로그램 종료 중... 통신 스레드를 안전하게 중지합니다.")
+        import pcmaster_worker
+        import time
+        
+        # 워커 파일의 무한 루프 플래그를 False로 변경
+        pcmaster_worker.is_running = False 
+        
+        # 스레드가 루프를 빠져나오고 포트를 닫을(close) 시간을 잠시 벌어줌
+        time.sleep(0.5) 
+        
+    # 사용자가 창을 닫아 앱이 종료되기 직전에 cleanup_before_exit 함수 자동 실행
+    app.aboutToQuit.connect(cleanup_before_exit)
     
     sys.exit(app.exec_())
