@@ -595,16 +595,41 @@ class HMIDashboardWidget(QWidget):
                 lbl.setStyleSheet(f"background-color: {'#3498db' if is_running else '#555'}; color: white; padding: 5px; font-weight: bold;")
 
     def update_plc_data(self, data):
+        # 대소문자 구분 없이 라벨을 찾기 위한 딕셔너리
         lower_labels = {k.lower(): v for k, v in self.data_labels.items()}
         
+        # 1. 기존 데이터 (전압, 전류, 전력, 온도 등) 일괄 갱신
         for key, value in data.items():
             lower_key = key.lower()
             
             if lower_key in lower_labels:
                 formatted_value = f"{value:.1f}" if isinstance(value, float) else str(value)
                 lower_labels[lower_key].setText(formatted_value)
-            else:
-                pass
+                
+        # ----------------------------------------------------------------------
+        # 2. 🌟 각 변압기 용량에 따른 부하율(%) 별도 계산 및 화면 갱신 추가
+        # ----------------------------------------------------------------------
+        try:
+            # TR-1 (용량: 1,000kVA) - (현재전력 / 1000) * 100
+            if 'Tr1_P_kW' in data and 'tr1_load' in lower_labels:
+                tr1_kw = float(data['Tr1_P_kW'])
+                tr1_load = (tr1_kw / 1000.0) * 100.0
+                lower_labels['tr1_load'].setText(f"{tr1_load:.1f}")
+                
+            # TR-2 (용량: 1,250kVA) - (현재전력 / 1250) * 100
+            if 'Tr2_P_kW' in data and 'tr2_load' in lower_labels:
+                tr2_kw = float(data['Tr2_P_kW'])
+                tr2_load = (tr2_kw / 1250.0) * 100.0
+                lower_labels['tr2_load'].setText(f"{tr2_load:.1f}")
+                
+            # TR-3 (용량: 1,250kVA) - (현재전력 / 1250) * 100
+            if 'Tr3_P_kW' in data and 'tr3_load' in lower_labels:
+                tr3_kw = float(data['Tr3_P_kW'])
+                tr3_load = (tr3_kw / 1250.0) * 100.0
+                lower_labels['tr3_load'].setText(f"{tr3_load:.1f}")
+                
+        except Exception as e:
+            print(f"부하율 계산 오류: {e}")
 
     # --------------------------------------------------------------------------
     # 버튼 색상 점등 처리기
