@@ -29,12 +29,12 @@ def safe_modbus_call(func, address, count=None, value=None, values=None, slave_i
 # 🌟 [신규 추가] 16비트 레지스터 분할 데이터를 32/64비트로 병합하는 헬퍼 함수
 def to_32bit(regs, idx):
     """16비트 레지스터 2개를 32비트 정수(Signed)로 변환 (High-Low Word 순서)"""
-    packed = struct.pack('<HH', regs[idx], regs[idx+1])
+    packed = struct.pack('<HH', regs[idx+1], regs[idx])
     return struct.unpack('<i', packed)[0]
 
 def to_64bit(regs, idx):
     """16비트 레지스터 4개를 64비트 정수(Signed)로 변환 (총사용량 등)"""
-    packed = struct.pack('<HHHH', regs[idx], regs[idx+1], regs[idx+2], regs[idx+3])
+    packed = struct.pack('<HHHH', regs[idx+3], regs[idx+2], regs[idx+1], regs[idx])
     return struct.unpack('<q', packed)[0]
 
 config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
@@ -76,10 +76,13 @@ else:
     
 def write_plc_bit(address, state):
     if client_plc and client_plc.is_socket_open():
-        # 🌟 UI의 10진수 입력값(예: 100)을 16진수 주소(0x0100 -> 256)로 변환
-        hex_address = int(str(address), 16)
-        safe_modbus_call(client_plc.write_coil, address=hex_address, value=state, slave_id=5)
-        print(f"👉 [비트 제어] M{address:04d} (Modbus 번지: {hex_address})에 {state} 전송 완료")
+        # 🌟 UI의 10진수형 주소(예: 110)를 워드와 비트로 쪼개어 실제 Modbus 주소로 변환
+        word = address // 10  # 110 // 10 = 11 (워드 번호)
+        bit = address % 10    # 110 % 10 = 0 (비트 번호)
+        real_modbus_address = (word * 16) + bit  # (11 * 16) + 0 = 176번지
+        
+        safe_modbus_call(client_plc.write_coil, address=real_modbus_address, value=state, slave_id=5)
+        print(f"👉 [비트 제어] M{address:04d} (Modbus {real_modbus_address}번지)에 {state} 전송 완료")
 
 def write_plc_register(address, value):
     if client_plc and client_plc.is_socket_open():
@@ -169,10 +172,25 @@ def serial_receive_thread():
                         print(f"✅ [워드 제어] D0900~0905 번지에 온도 설정값 {pending_tr_fan_values} 전송 완료")
                         pending_tr_fan_values = None                
                     
-                    current_step = "PLC(국번 5) 상태 비트 읽기 (M0200)"
-                    res_coils = safe_modbus_call(client_plc.read_coils, address=0x0200, count=23, slave_id=5)
+                    current_step = "PLC(국번 5) 상태 비트 읽기 (M0200~M0220)"
+                    
+                    # 🌟 M0200의 실제 Modbus 시작 번지는 320 ((20 * 16) + 0 = 320)
+                    # M0220(352번지)까지 포함하여 총 33칸을 읽어옵니다.
+                    res_coils = safe_modbus_call(client_plc.read_coils, address=320, count=33, slave_id=5)
+                    
                     if res_coils and not res_coils.isError():
-                        comm_signal.plc_status_update.emit(res_coils.bits[:23])
+                        clean_bits = [] # A~F가 제거된 순수한 0~9 비트만 담을 리스트
+                        
+                        for i, state in enumerate(res_coils.bits[:33]):
+                            modbus_addr = 320 + i
+                            bit = modbus_addr % 16 # 현재 주소의 비트 자리수 (0~15)
+                            
+                            # 🌟 비트 자리가 9 이하인 경우(0~9)만 추출하고, 10~15(A~F)는 무시합니다.
+                            if bit <= 9:
+                                clean_bits.append(state)
+                        
+                        # 완성된 clean_bits는 우리가 설계한 순서(M0200...M0209, M0210...)와 정확히 일치합니다.
+                        comm_signal.plc_status_update.emit(clean_bits)
                         
                     current_step = "PLC(국번 5) 센서 워드 읽기 (D0950)"
                     res_plc = safe_modbus_call(client_plc.read_holding_registers, address=950, count=7, slave_id=5)
@@ -193,6 +211,7 @@ def serial_receive_thread():
                             'Tr3_Temp': 수집데이터[48],
                             'Tr1_V_R_S': 수집데이터[22],
                             'Tr1_A_R': 수집데이터[16],
+
                             'Tr1_P_kW': 수집데이터[25],
                             'Tr2_V_R_S': 수집데이터[33],
                             'Tr2_A_R': 수집데이터[27],
