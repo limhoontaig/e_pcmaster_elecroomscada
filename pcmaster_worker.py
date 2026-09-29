@@ -57,8 +57,14 @@ last_max_calc_time = 0
 is_first_tr_send = True
 
 client_relay = ModbusSerialClient(port=COM_PORT_RELAY, baudrate=BAUD_RATE, timeout=0.3, stopbits=1, bytesize=8, parity='N')
-client_plc = ModbusSerialClient(port=COM_PORT_PLC, baudrate=BAUD_RATE, timeout=0.3, stopbits=1, bytesize=8, parity='N')
 
+if COM_PORT_RELAY == COM_PORT_PLC:
+    # 🌟 포트가 같으면(예: 둘 다 COM3) 객체를 하나로 공유합니다.
+    client_plc = client_relay
+else:
+    # 🌟 포트가 다르면 따로 생성합니다.
+    client_plc = ModbusSerialClient(port=COM_PORT_PLC, baudrate=BAUD_RATE, timeout=0.3, stopbits=1, bytesize=8, parity='N')
+    
 def write_plc_bit(address, state):
     """UI에서 마우스로 비트 스위치를 누를 때 실행 (예: M0100 대역)"""
     if client_plc and client_plc.is_socket_open():
@@ -83,9 +89,12 @@ def serial_receive_thread():
                 relay_connected = client_relay.is_socket_open()
                 plc_connected = client_plc.is_socket_open()
 
-                if not relay_connected:
+                # 🌟 relay 먼저 연결 시도
+                if not client_relay.is_socket_open():
                     client_relay.connect()
-                if not plc_connected:
+                
+                # 🌟 plc 포트가 relay와 다르게 설정되어 있을 때만 별도로 연결 시도
+                if client_plc is not client_relay and not client_plc.is_socket_open():
                     client_plc.connect()
 
                 if not (client_relay.is_socket_open() or client_plc.is_socket_open()):
