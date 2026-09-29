@@ -30,12 +30,12 @@ def safe_modbus_call(func, address, count=None, value=None, values=None, slave_i
 def to_32bit(regs, idx):
     """16비트 레지스터 2개를 32비트 정수(Signed)로 변환 (High-Low Word 순서)"""
     packed = struct.pack('<HH', regs[idx+1], regs[idx])
-    return struct.unpack('<i', packed)[0]
+    return struct.unpack('<I', packed)[0]
 
 def to_64bit(regs, idx):
     """16비트 레지스터 4개를 64비트 정수(Signed)로 변환 (총사용량 등)"""
     packed = struct.pack('<HHHH', regs[idx+3], regs[idx+2], regs[idx+1], regs[idx])
-    return struct.unpack('<q', packed)[0]
+    return struct.unpack('<Q', packed)[0]
 
 config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
 
