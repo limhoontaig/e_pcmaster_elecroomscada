@@ -26,16 +26,17 @@ def safe_modbus_call(func, address, count=None, value=None, values=None, slave_i
             raise e
     return None
 
-# 🌟 [신규 추가] 16비트 레지스터 분할 데이터를 32/64비트로 병합하는 헬퍼 함수
+# 🌟 [최종 수정] 실수(Real/Float) 형식으로 변환하는 함수
 def to_32bit(regs, idx):
-    """16비트 레지스터 2개를 32비트 정수(Signed)로 변환 (High-Low Word 순서)"""
-    packed = struct.pack('<HH', regs[idx+1], regs[idx])
-    return struct.unpack('<I', packed)[0]
+    """16비트 레지스터 2개를 32비트 실수(Float/Real)로 변환"""
+    # 워드 스왑(Word Swap) 방식을 유지하면서 'f' 기호를 사용하여 실수로 읽어냅니다.
+    packed = struct.pack('>HH', regs[idx+1], regs[idx])
+    return struct.unpack('>f', packed)[0]
 
 def to_64bit(regs, idx):
-    """16비트 레지스터 4개를 64비트 정수(Signed)로 변환 (총사용량 등)"""
-    packed = struct.pack('<HHHH', regs[idx+3], regs[idx+2], regs[idx+1], regs[idx])
-    return struct.unpack('<Q', packed)[0]
+    """16비트 레지스터 4개를 64비트 실수(Double)로 변환 (총사용량 등)"""
+    packed = struct.pack('>HHHH', regs[idx+3], regs[idx+2], regs[idx+1], regs[idx])
+    return struct.unpack('>d', packed)[0]
 
 config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
 
