@@ -85,15 +85,16 @@ def serial_receive_thread():
     
     try:
         while is_running:
+            current_step = "통신 루프 시작 대기"
             try:
                 relay_connected = client_relay.is_socket_open()
                 plc_connected = client_plc.is_socket_open()
 
-                # 🌟 relay 먼저 연결 시도
+                current_step = "릴레이(계전기) 통신 포트 연결"
                 if not client_relay.is_socket_open():
                     client_relay.connect()
                 
-                # 🌟 plc 포트가 relay와 다르게 설정되어 있을 때만 별도로 연결 시도
+                current_step = "PLC 통신 포트 연결"
                 if client_plc is not client_relay and not client_plc.is_socket_open():
                     client_plc.connect()
 
@@ -108,6 +109,7 @@ def serial_receive_thread():
                 # ⚡ [그룹 A] 전력 계전기 통신 (국번 6, 1, 2, 3) 
                 # =============================================================
                 if client_relay.is_socket_open():
+                    current_step = "계전기(국번 6) 데이터 읽기"
                     res_kep = safe_modbus_call(client_relay.read_input_registers, address=4, count=32, slave_id=6)
                     if res_kep and not res_kep.isError():
                         통신성공_여부 = True
@@ -119,6 +121,7 @@ def serial_receive_thread():
                         수집데이터[14] = res_kep.registers[24]/1000.0  
                         수집데이터[15] = ((res_kep.registers[30] << 16) + res_kep.registers[31])/1000.0 
                         
+                    current_step = "계전기 TR-1(국번 1) 데이터 읽기"
                     res_tr1 = safe_modbus_call(client_relay.read_input_registers, address=4, count=38, slave_id=1)
                     if res_tr1 and not res_tr1.isError():
                         통신성공_여부 = True
@@ -127,6 +130,7 @@ def serial_receive_thread():
                         수집데이터[22] = res_tr1.registers[12]; 수집데이터[23] = res_tr1.registers[14]; 수집데이터[24] = res_tr1.registers[16]
                         수집데이터[25] = res_tr1.registers[20] / 1000.0  
 
+                    current_step = "계전기 TR-2(국번 2) 데이터 읽기"
                     res_tr2 = safe_modbus_call(client_relay.read_input_registers, address=4, count=38, slave_id=2)
                     if res_tr2 and not res_tr2.isError():
                         통신성공_여부 = True
@@ -135,6 +139,7 @@ def serial_receive_thread():
                         수집데이터[33] = res_tr2.registers[12]; 수집데이터[34] = res_tr2.registers[14]; 수집데이터[35] = res_tr2.registers[16]
                         수집데이터[36] = res_tr2.registers[20] / 1000.0  
 
+                    current_step = "계전기 TR-3(국번 3) 데이터 읽기"
                     res_tr3 = safe_modbus_call(client_relay.read_input_registers, address=4, count=38, slave_id=3)
                     if res_tr3 and not res_tr3.isError():
                         통신성공_여부 = True
@@ -149,17 +154,20 @@ def serial_receive_thread():
                 if client_plc.is_socket_open():
                     # 👇 2. 여기에 다이얼로그에서 넘어온 설정값을 PLC로 쏘는 로직을 추가합니다.
                     if pending_tr_fan_values is not None:
+                        current_step = "PLC(국번 5) 온도 설정값 쓰기 (D0900)"
                         # D900번지부터 6개의 값을 한 번에 전송 (Write Multiple Registers)
                         safe_modbus_call(client_plc.write_registers, address=900, values=pending_tr_fan_values, slave_id=5)
                         print(f"✅ [워드 제어] D0900~0905 번지에 온도 설정값 {pending_tr_fan_values} 전송 완료")
                         # 전송 완료 후 메모장 비우기
                         pending_tr_fan_values = None                
                     
+                    current_step = "PLC(국번 5) 상태 비트 읽기 (M0200)"
                     # 상태 비트 (M0200 ~ M0222) 읽어오기
                     res_coils = safe_modbus_call(client_plc.read_coils, address=200, count=23, slave_id=5)
                     if res_coils and not res_coils.isError():
                         comm_signal.plc_status_update.emit(res_coils.bits[:23])
                         
+                    current_step = "PLC(국번 5) 센서 워드 읽기 (D0950)"
                     # 🌟 [수정됨] 센서값 워드 읽어오기 (D00950 ~ D00956)
                     res_plc = safe_modbus_call(client_plc.read_holding_registers, address=950, count=7, slave_id=5)
                     if res_plc and not res_plc.isError():
@@ -199,6 +207,7 @@ def serial_receive_thread():
                         # 만들어진 딕셔너리를 UI로 전송
                         comm_signal.plc_data_update.emit(ui_data_dict)
 
+                        current_step = "PLC(국번 5) 스마트 환기 제어 판별 및 쓰기"
                         # 🌟 [스마트 환기 제어 판단 로직]
                         if vent_settings is not None:
                             out_temp = 수집데이터[1] # 실시간 외기 온도
@@ -228,6 +237,7 @@ def serial_receive_thread():
                             # 3) 시작 주소를 906으로 지정하여 4개의 배열 쏘기
                             safe_modbus_call(client_plc.write_registers, address=906, values=plc_vent_targets, slave_id=5)
                         
+                        current_step = "PLC(국번 5) 1분 변압기 최대 온도 연산 및 쓰기 (D0980)"
                         # 🌟 [수정됨] 1분(60초) 변압기 최대 온도 연산 및 전송 (D00980 ~ D00982)
                         now_t = time.time()
                         tr1_buffer.append(res_plc.registers[4]) 
@@ -243,6 +253,7 @@ def serial_receive_thread():
                             last_max_calc_time = now_t
                             is_first_tr_send = False
                     
+                    current_step = "PLC(국번 5) 에어컨 컨트롤러 로직 쓰기 (D2000)"
                     # 에어컨 컨트롤러 로직 유지
                     if 통신성공_여부:
                         ac_manager.check_and_control(
@@ -257,6 +268,7 @@ def serial_receive_thread():
                 # =============================================================
                 # [6] DB 로깅 (58초마다 기록)
                 # =============================================================
+                current_step = "데이터베이스 로깅 및 시그널 전송"
                 if 통신성공_여부:
                     comm_signal.status_changed.emit(True)
                 else:
@@ -270,7 +282,8 @@ def serial_receive_thread():
                 time.sleep(0.5)
 
             except Exception as e:
-                print(f"마스터 루프 에러: {e}")
+                # 🌟 예외 발생 시 에러 메시지와 함께 current_step 변수에 저장된 작업 구간을 출력합니다.
+                print(f"❌ [에러 발생 구간: {current_step}] -> 상세 내용: {e}")
                 if client_relay: client_relay.close()
                 if client_plc: client_plc.close()
 
