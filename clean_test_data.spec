@@ -2,15 +2,15 @@
 
 
 a = Analysis(
-    ['pcmaster_main.py'],
+    ['clean_test_data.py'],
     pathex=[],
     binaries=[],
-    datas=[('template_전기실_운영일지.xlsx', '.'), ('free-icon-folder-2015058.ico', '.'), ('config.ini', '.')],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['PyQt6', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets', 'PySide6'],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )
@@ -21,18 +21,17 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='main',
+    name='clean_test_data',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='free-icon-folder-2015058.ico'
 )
 coll = COLLECT(
     exe,
@@ -41,5 +40,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='main',
+    name='clean_test_data',
 )
