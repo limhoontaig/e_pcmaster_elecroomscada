@@ -1,0 +1,29 @@
+DB 에 이벤트 리스트용 테이블 작성 sql문
+HeidiSQL에서 바로 쿼리 탭(Query Tab)을 열고 붙여넣어 실행하실 수 있도록 인덱스 생성까지 하나로 통합된 깔끔한 MariaDB용 SQL 문을 작성해 드립니다.
+
+테이블 생성문 내부에 인덱스를 함께 정의해 두면 한 번의 실행으로 테이블과 인덱스가 완벽하게 구성됩니다.
+
+SQL
+-- 1. 사용할 데이터베이스 선택
+USE elecroomscada;
+
+-- 2. 알람 및 이벤트 이력 테이블 생성 (인덱스 포함)
+CREATE TABLE IF NOT EXISTS alarm_event_logs (
+    event_id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '이벤트 고유 번호',
+    occurred_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '이벤트 발생 시간',
+    event_type VARCHAR(20) COMMENT '이벤트 구분 (예: TRIP, ALARM, INFO, INSPECTION)',
+    equipment_name VARCHAR(50) COMMENT '대상 설비명 (예: TR1, 수중펌프, MAIN_ACB)',
+    event_msg VARCHAR(255) COMMENT '상세 내용 및 경보 메시지',
+    action_taken VARCHAR(255) DEFAULT NULL COMMENT '관리자 조치 내역',
+    cleared_at DATETIME DEFAULT NULL COMMENT '복구 및 조치 완료 시간',
+    operator_name VARCHAR(50) DEFAULT 'SYSTEM' COMMENT '조치자 성명 (자동 기록 시 SYSTEM)',
+    
+    -- [인덱스 정의] 검색 및 통계 속도 최적화를 위한 4종 인덱스
+    INDEX idx_alarm_event_time (occurred_at),
+    INDEX idx_alarm_equipment (equipment_name),
+    INDEX idx_alarm_event_type (event_type),
+    INDEX idx_equipment_time (equipment_name, occurred_at)
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='알람 및 현장점검 이벤트 이력 테이블';
+
+

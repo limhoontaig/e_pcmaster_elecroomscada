@@ -89,6 +89,34 @@ def init_db():
     except Exception:
         pass
 
+    # 🌟 [신규 추가] 알람 및 이벤트 이력 테이블 및 인덱스 생성
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS alarm_event_logs (
+            event_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            occurred_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            event_type VARCHAR(20),
+            equipment_name VARCHAR(50),
+            event_msg VARCHAR(255),
+            action_taken VARCHAR(255) DEFAULT NULL,
+            cleared_at DATETIME DEFAULT NULL,
+            operator_name VARCHAR(50) DEFAULT 'SYSTEM'
+        )
+    ''')
+    
+    # 통계 및 검색용 인덱스 4종 추가
+    alarm_indexes = [
+        'CREATE INDEX idx_alarm_event_time ON alarm_event_logs (occurred_at)',
+        'CREATE INDEX idx_alarm_equipment ON alarm_event_logs (equipment_name)',
+        'CREATE INDEX idx_alarm_event_type ON alarm_event_logs (event_type)',
+        'CREATE INDEX idx_equipment_time ON alarm_event_logs (equipment_name, occurred_at)'
+    ]
+    
+    for idx_query in alarm_indexes:
+        try:
+            c.execute(idx_query)
+        except Exception:
+            pass # 이미 존재하는 인덱스일 경우 무시하고 넘어감
+
     conn.commit()
     c.close()
     conn.close()
@@ -233,3 +261,72 @@ def get_field_inspections_for_date(target_date):
         if round_num in result:
             result[round_num] = {"name": name, "time": time_str}
     return result
+
+# =====================================================================
+# 🌟 [신규 추가] 알람 및 현장점검 이벤트 이력 관리 함수
+# =====================================================================
+
+def log_alarm_event(event_type, equipment, msg, operator="SYSTEM"):
+    """
+    [자동/수동 기록] 새로운 알람/이벤트가 발생했을 때 DB에 저장합니다.
+    """
+    conn = get_db_raw_connection()
+    c = conn.cursor()
+    try:
+        c.execute('''
+            INSERT INTO alarm_event_logs (event_type, equipment_name, event_msg, operator_name)
+            VALUES (%s, %s, %s, %s)
+        ''', (event_type, equipment, msg, operator))
+        conn.commit()
+    except Exception as e:
+        print(f"알람 이벤트 저장 오류: {e}")
+    finally:
+        c.close()
+        conn.close()
+
+def update_alarm_action(event_id, action_taken, operator):
+    """
+    [수동 조치] 대시보드 화면에서 미조치 알람에 대한 '조치 내용'을 기록할 때 호출됩니다.
+    """
+    conn = get_db_raw_connection()
+    c = conn.cursor()
+    try:
+        c.execute('''
+            UPDATE alarm_event_logs 
+            SET action_taken = %s, cleared_at = CURRENT_TIMESTAMP, operator_name = %s
+            WHERE event_id = %s
+        ''', (action_taken, operator, event_id))
+        conn.commit()
+    except Exception as e:
+        print(f"알람 조치 내역 업데이트 오류: {e}")
+    finally:
+        c.close()
+        conn.close()
+
+def get_alarm_history(start_date, end_date):
+    """
+    [데이터 조회] UI 대시보드 표출용으로 지정된 날짜 구간의 알람/이벤트 내역을 가져옵니다.
+    """
+    conn = get_db_raw_connection()
+    c = conn.cursor()
+    try:
+        # 종료일의 자정 직전(23:59:59)까지 포함하도록 설정
+        end_datetime = f"{end_date} 23:59:59"
+        
+        c.execute('''
+            SELECT event_id, DATE_FORMAT(occurred_at, '%%Y-%%m-%%d %%H:%%i:%%s'), 
+                   event_type, equipment_name, event_msg, 
+                   IFNULL(action_taken, '미조치'), 
+                   IFNULL(DATE_FORMAT(cleared_at, '%%Y-%%m-%%d %%H:%%i:%%s'), '-'), 
+                   operator_name
+            FROM alarm_event_logs
+            WHERE occurred_at >= %s AND occurred_at <= %s
+            ORDER BY occurred_at DESC
+        ''', (start_date, end_datetime))
+        return c.fetchall()
+    except Exception as e:
+        print(f"알람 이력 조회 오류: {e}")
+        return []
+    finally:
+        c.close()
+        conn.close()
