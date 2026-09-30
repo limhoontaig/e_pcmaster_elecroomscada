@@ -99,6 +99,7 @@ def init_db():
             event_msg VARCHAR(255),
             action_taken VARCHAR(255) DEFAULT NULL,
             cleared_at DATETIME DEFAULT NULL,
+            duration_seconds INT DEFAULT 0,
             operator_name VARCHAR(50) DEFAULT 'SYSTEM'
         )
     ''')
@@ -266,9 +267,9 @@ def get_field_inspections_for_date(target_date):
 # 🌟 [신규 추가] 알람 및 현장점검 이벤트 이력 관리 함수
 # =====================================================================
 
-def log_alarm_event(event_type, equipment, msg, operator="SYSTEM"):
+def log_event_start(event_type, equipment, msg, operator="SYSTEM"):
     """
-    [자동/수동 기록] 새로운 알람/이벤트가 발생했을 때 DB에 저장합니다.
+    [자동 기록] 시작(ON) 시 DB에 기록하고 고유 ID(event_id)를 반환합니다.
     """
     conn = get_db_raw_connection()
     c = conn.cursor()
@@ -278,8 +279,31 @@ def log_alarm_event(event_type, equipment, msg, operator="SYSTEM"):
             VALUES (%s, %s, %s, %s)
         ''', (event_type, equipment, msg, operator))
         conn.commit()
+        return c.lastrowid  # 👈 event_manager.py가 추적할 수 있도록 PK 반환
     except Exception as e:
-        print(f"알람 이벤트 저장 오류: {e}")
+        print(f"이벤트 시작 기록 오류: {e}")
+        return None
+    finally:
+        c.close()
+        conn.close()
+
+def log_event_end(event_id):
+    """
+    [자동 기록] 종료(OFF) 시 cleared_at을 찍고 duration_seconds를 계산해 업데이트합니다.
+    """
+    if not event_id: return
+    conn = get_db_raw_connection()
+    c = conn.cursor()
+    try:
+        c.execute('''
+            UPDATE alarm_event_logs 
+            SET cleared_at = CURRENT_TIMESTAMP,
+                duration_seconds = TIMESTAMPDIFF(SECOND, occurred_at, CURRENT_TIMESTAMP)
+            WHERE event_id = %s
+        ''', (event_id,))
+        conn.commit()
+    except Exception as e:
+        print(f"이벤트 종료 업데이트 오류: {e}")
     finally:
         c.close()
         conn.close()
@@ -305,19 +329,18 @@ def update_alarm_action(event_id, action_taken, operator):
 
 def get_alarm_history(start_date, end_date):
     """
-    [데이터 조회] UI 대시보드 표출용으로 지정된 날짜 구간의 알람/이벤트 내역을 가져옵니다.
+    [데이터 조회] UI 대시보드 표출용으로 지정된 날짜 구간의 내역을 가져옵니다.
     """
     conn = get_db_raw_connection()
     c = conn.cursor()
     try:
-        # 종료일의 자정 직전(23:59:59)까지 포함하도록 설정
         end_datetime = f"{end_date} 23:59:59"
-        
         c.execute('''
             SELECT event_id, DATE_FORMAT(occurred_at, '%%Y-%%m-%%d %%H:%%i:%%s'), 
                    event_type, equipment_name, event_msg, 
                    IFNULL(action_taken, '미조치'), 
-                   IFNULL(DATE_FORMAT(cleared_at, '%%Y-%%m-%%d %%H:%%i:%%s'), '-'), 
+                   IFNULL(DATE_FORMAT(cleared_at, '%%Y-%%m-%%d %%H:%%i:%%s'), '-'),
+                   duration_seconds, -- 👈 화면 표출을 위해 가동 시간도 함께 불러옴
                    operator_name
             FROM alarm_event_logs
             WHERE occurred_at >= %s AND occurred_at <= %s

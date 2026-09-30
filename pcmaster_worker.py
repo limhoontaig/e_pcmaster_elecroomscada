@@ -3,6 +3,8 @@ import time
 import os
 import struct
 import configparser
+
+import event_manager
 from datetime import datetime
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -206,6 +208,7 @@ def serial_receive_thread():
                                 clean_bits.append(state)
                         
                         # 완성된 clean_bits는 우리가 설계한 순서(M0200...M0209, M0210...)와 정확히 일치합니다.
+                        event_manager.process_plc_events(clean_bits)
                         comm_signal.plc_status_update.emit(clean_bits)
                         
                     current_step = "PLC(국번 5) 센서 워드 읽기 (D0950)"

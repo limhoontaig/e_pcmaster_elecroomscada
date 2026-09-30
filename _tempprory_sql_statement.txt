@@ -26,4 +26,7 @@ CREATE TABLE IF NOT EXISTS alarm_event_logs (
     
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='알람 및 현장점검 이벤트 이력 테이블';
 
+가동시간 추가 관련 sql
 
+-- 테이블에 가동 시간(초)을 저장할 필드 추가
+ALTER TABLE alarm_event_logs ADD COLUMN duration_seconds INT DEFAULT 0 COMMENT '가동 및 알람 유지 시간(초)';
