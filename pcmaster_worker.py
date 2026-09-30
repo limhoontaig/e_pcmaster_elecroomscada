@@ -135,7 +135,7 @@ def serial_receive_thread():
                         수집데이터[12] = to_32bit(res_kep.registers, 18);      수집데이터[13] = to_32bit(res_kep.registers, 20)           
                         수집데이터[14] = to_32bit(res_kep.registers, 24) / 1000.0  
                         # 🌟 64비트 총사용량 조합 함수(to_64bit) 적용 (28, 29, 30, 31번 4개 레지스터 묶음)
-                        수집데이터[15] = to_64bit(res_kep.registers, 28) / 1000.0 
+                        수집데이터[15] = to_32bit(res_kep.registers, 30) / 1000.0 
                         
                     current_step = "계전기 TR-1(국번 1) 데이터 읽기"
                     res_tr1 = safe_modbus_call(client_relay.read_input_registers, address=4, count=38, slave_id=1)
@@ -291,7 +291,7 @@ def serial_receive_thread():
                     insert_raw_data(수집데이터)
                     last_db_save_time = now_time
 
-                time.sleep(0.5)
+                time.sleep(0.1)
 
             except Exception as e:
                 print(f"❌ [에러 발생 구간: {current_step}] -> 상세 내용: {e}")
