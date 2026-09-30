@@ -54,6 +54,7 @@ class CommSignal(QObject):
     status_changed = pyqtSignal(bool)
     plc_status_update = pyqtSignal(list)
     plc_data_update = pyqtSignal(dict)
+    plc_initial_sync = pyqtSignal(bool, bool)
 
 comm_signal = CommSignal()
 last_db_save_time = 0
@@ -96,6 +97,7 @@ def serial_receive_thread():
     global tr1_buffer, tr2_buffer, tr3_buffer, last_max_calc_time, is_first_tr_send, is_running
     
     current_status = None
+    is_initial_sync_done = False
     
     try:
         while is_running:
@@ -168,6 +170,18 @@ def serial_receive_thread():
                 # 🏭 [그룹 B] LS PLC 통신 (국번 5) - 새 메모리 맵 반영
                 # =============================================================
                 if client_plc.is_socket_open():
+                    if not is_initial_sync_done:
+                        current_step = "PLC 초기 상태(M100, M101) 읽기"
+                        # M0100의 Modbus 주소는 160번지입니다 ((10*16)+0)
+                        res_init = safe_modbus_call(client_plc.read_coils, address=160, count=2, slave_id=5)
+                        if res_init and not res_init.isError():
+                            m100_state = res_init.bits[0]
+                            m101_state = res_init.bits[1]
+                            # UI로 시그널 쏘기!
+                            comm_signal.plc_initial_sync.emit(m100_state, m101_state)
+                            is_initial_sync_done = True
+                            print(f"🔄 초기 동기화 완료: M100(자동/수동)={m100_state}, M101(마스터)={m101_state}")
+                    
                     if pending_tr_fan_values is not None:
                         current_step = "PLC(국번 5) 온도 설정값 쓰기 (D0900)"
                         safe_modbus_call(client_plc.write_registers, address=900, values=pending_tr_fan_values, slave_id=5)
@@ -208,12 +222,13 @@ def serial_receive_thread():
                         수집데이터[48] = res_plc.registers[6] / 10.0    # D00956: Tr3_Temp
 
                         ui_data_dict = {
+                            'indoor_temp': 수집데이터[0],
+                            'outdoor_temp': 수집데이터[1],
                             'Tr1_Temp': 수집데이터[26],
                             'Tr2_Temp': 수집데이터[37],
                             'Tr3_Temp': 수집데이터[48],
                             'Tr1_V_R_S': 수집데이터[22],
                             'Tr1_A_R': 수집데이터[16],
-
                             'Tr1_P_kW': 수집데이터[25],
                             'Tr2_V_R_S': 수집데이터[33],
                             'Tr2_A_R': 수집데이터[27],

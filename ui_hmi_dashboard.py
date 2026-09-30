@@ -193,6 +193,8 @@ class HMIDashboardWidget(QWidget):
                 grid.addWidget(lcd, row_idx, col_idx + 1)
 
         main_layout.addWidget(data_frame, 1)
+        # 🌟 [신규 추가] 워커에서 쏜 시그널을 내 함수(sync_ui_from_plc)와 연결 (init_ui 맨 마지막 줄에 추가)
+        pcmaster_worker.comm_signal.plc_initial_sync.connect(self.sync_ui_from_plc)
 
     def create_ventilation_panel(self):
         frame = QFrame()
@@ -222,8 +224,49 @@ class HMIDashboardWidget(QWidget):
         glayout = QVBoxLayout(group)
         glayout.setSpacing(12) 
 
+        top_fan_layout = QHBoxLayout()
+        top_fan_layout.setSpacing(8)
+
+        # 1. 휀 애니메이션
         fan_graphic = FanGraphicWidget(fan_type="VENT")
-        glayout.addWidget(fan_graphic, 1)
+        top_fan_layout.addWidget(fan_graphic, 1)
+
+        # 2. 대형 디지털 온도 표시 박스
+        temp_box = QFrame()
+        temp_box.setStyleSheet("background-color: #080d14; border: 1px solid #2c3e50; border-radius: 6px;")
+        temp_layout = QVBoxLayout(temp_box)
+        temp_layout.setContentsMargins(6, 8, 6, 8)
+        temp_layout.setSpacing(2)
+
+        # SF는 외기(하늘색), EF는 실내(에메랄드 녹색) 테마
+        is_sf = (prefix == "SF")
+        temp_name = "외기 온도" if is_sf else "실내 온도"
+        temp_color = "#00e5ff" if is_sf else "#2ecc71"
+
+        lbl_t_title = QLabel(f"<b>{temp_name}</b>")
+        lbl_t_title.setAlignment(Qt.AlignCenter)
+        lbl_t_title.setStyleSheet("color: #95a5a6; font-size: 13px; border: none;")
+
+        lbl_t_val = QLabel("--.- ℃")
+        lbl_t_val.setAlignment(Qt.AlignCenter)
+        lbl_t_val.setStyleSheet(f"""
+            QLabel {{
+                color: {temp_color};
+                font-family: 'Consolas', '맑은 고딕', sans-serif;
+                font-size: 26px;
+                font-weight: bold;
+                border: none;
+            }}
+        """)
+        
+        # 외부에서 갱신할 수 있도록 객체 변수로 저장 (self.lbl_sf_temp, self.lbl_ef_temp)
+        setattr(self, f"lbl_{prefix.lower()}_temp", lbl_t_val)
+
+        temp_layout.addWidget(lbl_t_title)
+        temp_layout.addWidget(lbl_t_val)
+        top_fan_layout.addWidget(temp_box, 1)
+
+        glayout.addLayout(top_fan_layout, 1)
 
         lamp_layout = QHBoxLayout()
         
@@ -482,7 +525,7 @@ class HMIDashboardWidget(QWidget):
         self.btn_master.setText("전체 냉각설비 가동중" if is_on else "❄️ 겨울철 냉각설비 정지")
         self.btn_master.setStyleSheet(self.get_master_style(is_on))
         
-        self.safe_write_bit(101, is_on, "냉각설비 마스터")
+        self.safe_write_bit(101, not is_on, "냉각설비 마스터")
 
         for btn in [self.btn_auto, self.btn_tr1, self.btn_tr2, self.btn_tr3]:
             btn.setVisible(is_on)
@@ -501,7 +544,7 @@ class HMIDashboardWidget(QWidget):
         self.btn_auto.setText("자동 운전" if is_auto else "수동 운전")
         self.btn_auto.setStyleSheet(self.get_auto_manual_style(is_auto))
         
-        self.safe_write_bit(100, is_auto, "TR 자동/수동 모드")
+        self.safe_write_bit(100, not is_auto, "TR 자동/수동 모드")
 
         if is_auto:
             self.btn_tr1.setChecked(False)
@@ -630,6 +673,48 @@ class HMIDashboardWidget(QWidget):
                 
         except Exception as e:
             print(f"부하율 계산 오류: {e}")
+
+        # ======================================================================
+        # 🌟 [추가] 3. 환기설비 SF(외기온도) / EF(실내온도) 라벨 실시간 갱신
+        # ======================================================================
+        if hasattr(self, 'lbl_sf_temp') and 'outdoor_temp' in data:
+            self.lbl_sf_temp.setText(f"{float(data['outdoor_temp']):.1f} ℃")
+
+        if hasattr(self, 'lbl_ef_temp') and 'indoor_temp' in data:
+            self.lbl_ef_temp.setText(f"{float(data['indoor_temp']):.1f} ℃")
+
+    def sync_ui_from_plc(self, m100_state, m101_state):
+        """프로그램 시작 시 PLC의 M0100(자동/수동), M0101(마스터) 상태를 읽어와 화면에 동기화"""
+        
+        # 🌟 PLC 래더를 b접점으로 짰으므로, PLC 값이 0(False)일 때 UI는 켜짐(True) 상태가 됩니다.
+        is_auto = not m100_state
+        is_master_on = not m101_state
+
+        # 1. 무한 루프 방지: UI 버튼 상태를 바꿀 때 클릭 이벤트(통신 송신)가 발생하지 않도록 신호 차단
+        self.btn_auto.blockSignals(True)
+        self.btn_master.blockSignals(True)
+
+        # 2. 버튼 상태(체크 여부, 텍스트, 색상) 업데이트
+        self.btn_auto.setChecked(is_auto)
+        self.btn_auto.setText("자동 운전" if is_auto else "수동 운전")
+        self.btn_auto.setStyleSheet(self.get_auto_manual_style(is_auto))
+
+        self.btn_master.setChecked(is_master_on)
+        self.btn_master.setText("전체 냉각설비 가동중" if is_master_on else "❄️ 겨울철 냉각설비 정지")
+        self.btn_master.setStyleSheet(self.get_master_style(is_master_on))
+        
+        # 3. 하위 개별 TR 수동 버튼 활성화/비활성화 처리
+        self.set_individual_buttons_enabled(not is_auto)
+        if not is_master_on:
+            for btn in [self.btn_auto, self.btn_tr1, self.btn_tr2, self.btn_tr3]:
+                btn.setVisible(False)
+        else:
+            for btn in [self.btn_auto, self.btn_tr1, self.btn_tr2, self.btn_tr3]:
+                btn.setVisible(True)
+
+        # 4. 업데이트가 끝나면 다시 클릭 이벤트를 활성화하여 사용자가 조작할 수 있게 복구
+        self.btn_auto.blockSignals(False)
+        self.btn_master.blockSignals(False)
 
     # --------------------------------------------------------------------------
     # 버튼 색상 점등 처리기
