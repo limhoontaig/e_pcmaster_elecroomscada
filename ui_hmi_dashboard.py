@@ -28,7 +28,7 @@ class FanGraphicWidget(QWidget):
     def set_fan_state(self, state):
         self.is_running = state
         if self.is_running:
-            self.timer.start(30)
+            self.timer.start(150)
         else:
             self.timer.stop()
         self.update()

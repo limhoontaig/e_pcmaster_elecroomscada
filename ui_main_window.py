@@ -381,13 +381,23 @@ class SCADAWindow(QMainWindow):
             QMessageBox.critical(self, "오류 발생", f"엑셀 운영일지 생성 중 오류가 발생했습니다.\n에러 내용: {e}")
         
     def auto_refresh(self):
-        self.qdate.setMaximumDate(QDate.currentDate())
-        curr_hour = datetime.now().hour
-        if curr_hour != self.last_hour:
-            self.last_hour = curr_hour
-            db_manager.calculate_hourly_avg()
-        self.load_data()
-        self.graph_manager.update_graph() 
+        try:
+            # 기존 코드를 모두 try 안으로 한 칸(Tab) 들여쓰기 합니다.
+            self.qdate.setMaximumDate(QDate.currentDate())
+            curr_hour = datetime.now().hour
+            
+            if curr_hour != self.last_hour:
+                self.last_hour = curr_hour
+                db_manager.calculate_hourly_avg()
+                
+            self.load_data()
+            self.graph_manager.update_graph()
+            
+        except Exception as e:
+            # 🌟 에러가 발생해도 프로그램이 뻗지 않고 경고창만 띄우도록 처리
+            print(f"⚠ 날짜 갱신 중 에러 발생 (프로그램 다운 방어): {e}")
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(None, "데이터 갱신 지연", "데이터베이스 연결이 지연되었습니다. 잠시 후 다시 조작해 주세요.")
 
     def click_open_meter_popup(self):
         current_date_str = self.qdate.date().toString("yyyy-MM-dd")
