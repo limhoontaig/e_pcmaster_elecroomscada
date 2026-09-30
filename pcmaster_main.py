@@ -11,6 +11,9 @@ from PyQt5.QtCore import Qt, QCoreApplication, QThread, pyqtSignal, QSharedMemor
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import QSharedMemory
 
+from ui_ventilation import VentilationSettingsDialog
+from tr_controller import TRFanSettingsDialog
+
 # 최상위 관리 모듈 로드 (윈도우 로드는 지연 가능하도록 아래에서 하거나 그대로 둠)
 import db_manager
 import pcmaster_worker
@@ -105,6 +108,10 @@ if __name__ == "__main__":
         # DB 작업이 끝난 평온한 상태에서 메인 창 생성
         win = SCADAWindow()
         center_window(win)
+        
+        # 🌟 [신규 추가] 프로그램 구동 시 설정창들을 백그라운드에서 생성하여 초기값을 워커로 자동 전달
+        win.vent_dialog = VentilationSettingsDialog(win)
+        win.tr_dialog = TRFanSettingsDialog(win)
 
         # =================================================================
         # ⭐ [누락된 부분 추가] pcmaster_worker의 시그널을 화면의 상태 변경 함수와 연결합니다!

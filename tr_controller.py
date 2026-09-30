@@ -55,6 +55,19 @@ class TRFanSettingsDialog(QDialog):
                 self.tr2_off = sec.getfloat('tr2_off', 50.0)
                 self.tr3_on = sec.getfloat('tr3_on', 55.0)
                 self.tr3_off = sec.getfloat('tr3_off', 50.0)
+        self.update_worker()
+
+    def update_worker(self):
+        # 🌟 워커의 pending_tr_fan_values 변수에 1회성 전송용 리스트를 채워줍니다.
+        import pcmaster_worker
+        pcmaster_worker.pending_tr_fan_values = [
+            int(self.tr1_on * 10),   # .value() 제거
+            int(self.tr1_off * 10),  # .value() 제거
+            int(self.tr2_on * 10),   # .value() 제거
+            int(self.tr2_off * 10),  # .value() 제거
+            int(self.tr3_on * 10),   # .value() 제거
+            int(self.tr3_off * 10)   # .value() 제거
+        ]
 
     def create_tr_group(self, title, current_on, current_off, parent_layout):
         group = QGroupBox(title)

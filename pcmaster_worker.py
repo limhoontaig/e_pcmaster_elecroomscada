@@ -60,6 +60,7 @@ last_db_save_time = 0
 pending_ac_fan_values = None
 pending_tr_fan_values = None
 vent_settings = None
+last_sent_vent_targets = None
 is_running = True
 
 tr1_buffer = []
@@ -91,7 +92,7 @@ def write_plc_register(address, value):
         print(f"🌡️ [워드 제어] D{address:04d} 번지에 설정값 {value} 전송 완료")
 
 def serial_receive_thread():
-    global last_db_save_time, pending_ac_fan_values, pending_tr_fan_values
+    global last_db_save_time, pending_ac_fan_values, pending_tr_fan_values, last_sent_vent_targets
     global tr1_buffer, tr2_buffer, tr3_buffer, last_max_calc_time, is_first_tr_send, is_running
     
     current_status = None
@@ -246,10 +247,12 @@ def serial_receive_thread():
                                 int(target_supply_stop * 10),  
                                 int(target_supply_start * 10)  
                             ]
-                            safe_modbus_call(client_plc.write_registers, address=906, values=plc_vent_targets, slave_id=5)
-                            print(f"✅ [워드 제어] D0906~0909 번지에 환기 설정값 {plc_vent_targets} 전송 완료") # 🌟 이 줄 추가
+                            if plc_vent_targets != last_sent_vent_targets:
+                                safe_modbus_call(client_plc.write_registers, address=906, values=plc_vent_targets, slave_id=5)
+                                print(f"✅ [워드 제어] D0906~0909 번지에 환기 설정값 {plc_vent_targets} 전송 완료")
+                                last_sent_vent_targets = plc_vent_targets
                         
-                        current_step = "PLC(국번 5) 1분 변압기 최대 온도 연산 및 쓰기 (D0980)"
+                        current_step = "PLC(국번 5) 1분 변압기 최대 온도 연산 및 쓰기 (D0980~D0982)"
                         now_t = time.time()
                         tr1_buffer.append(res_plc.registers[4]) 
                         tr2_buffer.append(res_plc.registers[5])
@@ -284,7 +287,7 @@ def serial_receive_thread():
                     comm_signal.status_changed.emit(False)
 
                 now_time = time.time()
-                if 통신성공_여부 and (now_time - last_db_save_time >= 58.0):
+                if 통신성공_여부 and (now_time - last_db_save_time >= 59.5):
                     insert_raw_data(수집데이터)
                     last_db_save_time = now_time
 
