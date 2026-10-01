@@ -34,7 +34,10 @@ PLC_TAG_MAP = {
     17: ("ALARM",     "rtd_ch0_err",               "전기실 온도 센서 단선"),
     18: ("ALARM",     "rtd_ch1_err",               "외기온도 센서 단선"),
     19: ("ALARM",     "rtd_ch2_err",               "에어컨01 온도 센서 단선"),
-    20: ("ALARM",     "rtd_ch3_err",               "에어컨02 온도 센서 단선")
+    20: ("ALARM",     "rtd_ch3_err",               "에어컨02 온도 센서 단선"),
+
+    21: ("OPERATION", "aircon01_operation",          "에어컨01 가동 (환기팬 연동 정지)"),
+    22: ("OPERATION", "aircon02_operation",          "에어컨02 가동 (환기팬 연동 정지)")
 }
 
 def process_plc_events(current_bits):
@@ -160,4 +163,3 @@ def process_relay_events(slave_id, registers):
                         
     # 현재 상태를 과거 상태로 업데이트
     last_relay_bits[slave_id] = current_bits
-    

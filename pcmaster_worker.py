@@ -230,12 +230,12 @@ def serial_receive_thread():
                     
                     # 🌟 M0200의 실제 Modbus 시작 번지는 320 ((20 * 16) + 0 = 320)
                     # M0220(352번지)까지 포함하여 총 33칸을 읽어옵니다.
-                    res_coils = safe_modbus_call(client_plc.read_coils, address=320, count=33, slave_id=5)
+                    res_coils = safe_modbus_call(client_plc.read_coils, address=320, count=35, slave_id=5)
                     
                     if res_coils and not res_coils.isError():
                         clean_bits = [] # A~F가 제거된 순수한 0~9 비트만 담을 리스트
                         
-                        for i, state in enumerate(res_coils.bits[:33]):
+                        for i, state in enumerate(res_coils.bits[:35]):
                             modbus_addr = 320 + i
                             bit = modbus_addr % 16 # 현재 주소의 비트 자리수 (0~15)
                             
