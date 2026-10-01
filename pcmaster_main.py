@@ -140,7 +140,7 @@ if __name__ == "__main__":
     worker.start()
 
     def cleanup_before_exit():
-        print("프로그램 종료 중... 통신 스레드를 안전하게 중지합니다.")
+        # print("프로그램 종료 중... 통신 스레드를 안전하게 중지합니다.")
         import pcmaster_worker
         import time
         

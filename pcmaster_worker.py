@@ -87,12 +87,12 @@ def write_plc_bit(address, state):
         real_modbus_address = (word * 16) + bit  # (11 * 16) + 0 = 176번지
         
         safe_modbus_call(client_plc.write_coil, address=real_modbus_address, value=state, slave_id=5)
-        print(f"👉 [비트 제어] M{address:04d} (Modbus {real_modbus_address}번지)에 {state} 전송 완료")
+        #print(f"👉 [비트 제어] M{address:04d} (Modbus {real_modbus_address}번지)에 {state} 전송 완료")
 
 def write_plc_register(address, value):
     if client_plc and client_plc.is_socket_open():
         safe_modbus_call(client_plc.write_register, address=address, value=int(value * 10), slave_id=5)
-        print(f"🌡️ [워드 제어] D{address:04d} 번지에 설정값 {value} 전송 완료")
+        #print(f"🌡️ [워드 제어] D{address:04d} 번지에 설정값 {value} 전송 완료")
 
 def serial_receive_thread():
     global last_db_save_time, pending_ac_fan_values, pending_tr_fan_values, last_sent_vent_targets
@@ -182,12 +182,12 @@ def serial_receive_thread():
                             # UI로 시그널 쏘기!
                             comm_signal.plc_initial_sync.emit(m100_state, m101_state)
                             is_initial_sync_done = True
-                            print(f"🔄 초기 동기화 완료: M100(자동/수동)={m100_state}, M101(마스터)={m101_state}")
+                            #print(f"🔄 초기 동기화 완료: M100(자동/수동)={m100_state}, M101(마스터)={m101_state}")
                     
                     if pending_tr_fan_values is not None:
                         current_step = "PLC(국번 5) 온도 설정값 쓰기 (D0900)"
                         safe_modbus_call(client_plc.write_registers, address=900, values=pending_tr_fan_values, slave_id=5)
-                        print(f"✅ [워드 제어] D0900~0905 번지에 온도 설정값 {pending_tr_fan_values} 전송 완료")
+                        # print(f"✅ [워드 제어] D0900~0905 번지에 온도 설정값 {pending_tr_fan_values} 전송 완료")
                         pending_tr_fan_values = None                
                     
                     current_step = "PLC(국번 5) 상태 비트 읽기 (M0200~M0220)"
@@ -267,7 +267,7 @@ def serial_receive_thread():
                             ]
                             if plc_vent_targets != last_sent_vent_targets:
                                 safe_modbus_call(client_plc.write_registers, address=906, values=plc_vent_targets, slave_id=5)
-                                print(f"✅ [워드 제어] D0906~0909 번지에 환기 설정값 {plc_vent_targets} 전송 완료")
+                                # print(f"✅ [워드 제어] D0906~0909 번지에 환기 설정값 {plc_vent_targets} 전송 완료")
                                 last_sent_vent_targets = plc_vent_targets
                         
                         current_step = "PLC(국번 5) 1분 변압기 최대 온도 연산 및 쓰기 (D0980~D0982)"
@@ -312,7 +312,7 @@ def serial_receive_thread():
                 time.sleep(0.1)
 
             except Exception as e:
-                print(f"❌ [에러 발생 구간: {current_step}] -> 상세 내용: {e}")
+                # print(f"❌ [에러 발생 구간: {current_step}] -> 상세 내용: {e}")
                 if client_relay: client_relay.close()
                 if client_plc: client_plc.close()
 
@@ -321,7 +321,7 @@ def serial_receive_thread():
 
                 time.sleep(1)
     finally:
-        print("통신 포트를 안전하게 닫습니다.")
+        # print("통신 포트를 안전하게 닫습니다.")
         if client_relay: client_relay.close()
         if client_plc: client_plc.close()
 

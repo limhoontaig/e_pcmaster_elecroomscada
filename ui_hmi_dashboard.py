@@ -672,7 +672,8 @@ class HMIDashboardWidget(QWidget):
                 lower_labels['tr3_load'].setText(f"{tr3_load:.1f}")
                 
         except Exception as e:
-            print(f"부하율 계산 오류: {e}")
+            pass
+            # print(f"부하율 계산 오류: {e}")
 
         # ======================================================================
         # 🌟 [추가] 3. 환기설비 SF(외기온도) / EF(실내온도) 라벨 실시간 갱신
@@ -749,12 +750,12 @@ class HMIDashboardWidget(QWidget):
     # 🛡️ 통신 에러 방어막
     # ==========================================================================
     def safe_write_bit(self, addr, state, log_msg=""):
-        print(f"👉 [명령] {log_msg} (M0{addr:03d}) ➡️ {state}")
+        # print(f"👉 [명령] {log_msg} (M0{addr:03d}) ➡️ {state}")
         try:
             pcmaster_worker.write_plc_bit(addr, state)
         except Exception as e:
             error_msg = f"장비와 통신할 수 없습니다.\n통신선 연결이나 포트 상태를 확인하세요.\n(상세 에러: {e})"
-            print(f"⚠️ [통신 에러 차단] {error_msg}")
+            # print(f"⚠️ [통신 에러 차단] {error_msg}")
             QMessageBox.warning(self, "통신 오류", error_msg)
 
     # ==========================================================================

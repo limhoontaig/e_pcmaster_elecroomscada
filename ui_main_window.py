@@ -312,7 +312,8 @@ class SCADAWindow(QMainWindow):
                         
                     self.alarm_table.setItem(r_idx, c_idx, item)
         except Exception as e:
-            print(f"알람 데이터 표출 에러: {e}")
+            pass
+            # print(f"알람 데이터 표출 에러: {e}")
     
     def open_power_report_dialog(self):
         """전력 통계 보고서 전용 독립 창을 띄웁니다."""
@@ -384,7 +385,8 @@ class SCADAWindow(QMainWindow):
             self.load_alarm_data()
             
         except Exception as e:
-            print(f"UI 로딩 실패: {e}")
+            pass
+            # print(f"UI 로딩 실패: {e}")
 
     def display_manual_table(self, rows):
         self.manual_table.setRowCount(len(rows))
@@ -453,7 +455,7 @@ class SCADAWindow(QMainWindow):
             
         except Exception as e:
             # 🌟 에러가 발생해도 프로그램이 뻗지 않고 경고창만 띄우도록 처리
-            print(f"⚠ 날짜 갱신 중 에러 발생 (프로그램 다운 방어): {e}")
+            # print(f"⚠ 날짜 갱신 중 에러 발생 (프로그램 다운 방어): {e}")
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(None, "데이터 갱신 지연", "데이터베이스 연결이 지연되었습니다. 잠시 후 다시 조작해 주세요.")
 
