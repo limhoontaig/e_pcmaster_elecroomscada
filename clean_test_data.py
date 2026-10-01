@@ -14,21 +14,23 @@ def clean_and_recalculate():
         # 🌟 수정된 부분: 어제/오늘 대신 특정 날짜로 직접 지정
         target_date1 = '2026-09-29'
         target_date2 = '2026-09-30'
+        target_date3 = '2026-10-01'
 
-        # 삭제 조건 지정
+        # 🌟 삭제 조건 지정 (날짜 3개를 모두 포함하도록 IN 구문으로 수정)
         target_condition = """
-            (log_date = %s OR log_date = %s)
+            log_date IN (%s, %s, %s)
             AND (
                 `KEP_P_kWh` <= 44000000.0  -- 👈 비정상적으로 낮은 값 삭제
                 OR `KEP_P_kWh` > 44700000.0 -- 👈 비정상적으로 높은 값 삭제
                 OR `실내온도` = 0 
+                OR `Tr1_Temp` = 0
             )
         """
 
         # 2. 비정상 데이터가 포함된 날짜(date)와 시간(hour) 추출
         find_sql = f"SELECT DISTINCT log_date, HOUR(log_time) FROM raw_data WHERE {target_condition}"
         # 🌟 지정한 변수로 쿼리 실행
-        cursor.execute(find_sql, (target_date1, target_date2))
+        cursor.execute(find_sql, (target_date1, target_date2, target_date3))
         affected_periods = cursor.fetchall()
 
         if not affected_periods:
@@ -42,7 +44,7 @@ def clean_and_recalculate():
         print(f"🗑️ 비정상 데이터 삭제 진행 (영향받는 시간대: {len(affected_periods)}개)")
         delete_sql = f"DELETE FROM raw_data WHERE {target_condition}"
         # 🌟 지정한 변수로 쿼리 실행
-        cursor.execute(delete_sql, (target_date1, target_date2))
+        cursor.execute(delete_sql, (target_date1, target_date2, target_date3))
         print(f"✅ 비정상 데이터 총 {cursor.rowcount}건 삭제 완료.")
 
         # 4. 시간대별 평균(hourly_avg) 재산출 및 덮어쓰기
