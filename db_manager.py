@@ -269,17 +269,20 @@ def get_field_inspections_for_date(target_date):
 
 def log_event_start(event_type, equipment, msg, operator="SYSTEM"):
     """
-    [자동 기록] 시작(ON) 시 DB에 기록하고 고유 ID(event_id)를 반환합니다.
+    [자동 기록] 시작(ON) 시 DB에 기록. 
+    ALARM만 '미조치(NULL)'로 두고, 나머지는 '조치사항 없음' 처리.
     """
+    initial_action = None if event_type == "ALARM" else "조치사항 없음"
+    
     conn = get_db_raw_connection()
     c = conn.cursor()
     try:
         c.execute('''
-            INSERT INTO alarm_event_logs (event_type, equipment_name, event_msg, operator_name)
-            VALUES (%s, %s, %s, %s)
-        ''', (event_type, equipment, msg, operator))
+            INSERT INTO alarm_event_logs (event_type, equipment_name, event_msg, action_taken, operator_name)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (event_type, equipment, msg, initial_action, operator))
         conn.commit()
-        return c.lastrowid  # 👈 event_manager.py가 추적할 수 있도록 PK 반환
+        return c.lastrowid
     except Exception as e:
         print(f"이벤트 시작 기록 오류: {e}")
         return None
@@ -287,17 +290,22 @@ def log_event_start(event_type, equipment, msg, operator="SYSTEM"):
         c.close()
         conn.close()
 
-def log_event_end(event_id):
+def log_event_end(event_id, event_type=None):
     """
-    [자동 기록] 종료(OFF) 시 cleared_at을 찍고 duration_seconds를 계산해 업데이트합니다.
+    [자동 기록] 종료(OFF) 시 cleared_at과 duration 계산.
+    ALARM이 해제될 때는 조치 내용을 자동으로 마감 처리.
     """
     if not event_id: return
+    
+    action_update = "action_taken = '자동 조치 완료(현장 리셋)', " if event_type == "ALARM" else ""
+    
     conn = get_db_raw_connection()
     c = conn.cursor()
     try:
-        c.execute('''
+        c.execute(f'''
             UPDATE alarm_event_logs 
-            SET cleared_at = CURRENT_TIMESTAMP,
+            SET {action_update}
+                cleared_at = CURRENT_TIMESTAMP,
                 duration_seconds = TIMESTAMPDIFF(SECOND, occurred_at, CURRENT_TIMESTAMP)
             WHERE event_id = %s
         ''', (event_id,))

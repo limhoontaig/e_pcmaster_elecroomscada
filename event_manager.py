@@ -52,17 +52,17 @@ def process_plc_events(current_bits):
                 e_type, equip_name, start_msg = PLC_TAG_MAP[idx]
                 
                 if curr_state == 1:
-                    # 시작 시 DB 기록 후 event_id 확보
                     event_id = db_manager.log_event_start(e_type, equip_name, start_msg)
                     if event_id:
-                        active_events[idx] = event_id
-                        print(f"[{e_type}] {start_msg} 발생 기록")
+                        # 🌟 수정: 튜플 형태로 event_id와 e_type을 함께 저장
+                        active_events[idx] = (event_id, e_type)
+                        # print(f"[{e_type}] {start_msg} 발생 기록")
                         
                 elif curr_state == 0:
-                    # 종료 시 가동/유지 시간(duration) 마감
                     if idx in active_events:
-                        event_id = active_events.pop(idx)
-                        db_manager.log_event_end(event_id)
-                        print(f"[{e_type}] {start_msg} 해제 (가동/알람 시간 저장 완료)")
+                        # 🌟 수정: 저장해둔 e_type을 꺼내어 log_event_end로 전달
+                        event_id, saved_e_type = active_events.pop(idx)
+                        db_manager.log_event_end(event_id, saved_e_type)
+                        #print(f"[{saved_e_type}] {start_msg} 해제 (시간 및 리셋 상태 저장 완료)")
 
     last_plc_bits = current_bits[:]
