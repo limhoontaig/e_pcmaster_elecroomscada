@@ -329,7 +329,7 @@ def serial_receive_thread():
                             dis_temp2=수집데이터[50], 
                             total_load=수집데이터[14]       
                         )
-                        safe_modbus_call(client_plc.write_register, address=2000, value=ac_manager.fan_control_cmd, slave_id=5)
+                        safe_modbus_call(client_plc.write_register, address=957, value=ac_manager.fan_control_cmd, slave_id=5)
 
                 # =============================================================
                 # [6] DB 로깅 (58초마다 기록)
