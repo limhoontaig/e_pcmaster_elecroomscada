@@ -13,6 +13,17 @@ from pymodbus.client import ModbusSerialClient
 from db_manager import DATA_LABELS, get_db_raw_connection
 from ac_controller import ac_manager 
 
+# 🌟 [신규 추가] PC 수동 조작 이벤트 매핑 딕셔너리
+COMMAND_MAP = {
+    100: "TR 냉각 자동(ON)/수동(OFF) 모드 전환",
+    101: "TR 냉각 전체 수동 기동",
+    102: "TR1 수동 기동 스위치",
+    103: "TR2 수동 기동 스위치",
+    104: "TR3 수동 기동 스위치",
+    116: "배기휀(EF) 수동 기동 스위치",
+    117: "급기휀(SF) 수동 기동 스위치"
+}
+
 def safe_modbus_call(func, address, count=None, value=None, values=None, slave_id=1):
     for key in ["slave", "unit", "slave_id", "device_id"]:
         kwargs = {key: slave_id}
@@ -81,13 +92,26 @@ else:
     
 def write_plc_bit(address, state):
     if client_plc and client_plc.is_socket_open():
-        # 🌟 UI의 10진수형 주소(예: 110)를 워드와 비트로 쪼개어 실제 Modbus 주소로 변환
-        word = address // 10  # 110 // 10 = 11 (워드 번호)
-        bit = address % 10    # 110 % 10 = 0 (비트 번호)
-        real_modbus_address = (word * 16) + bit  # (11 * 16) + 0 = 176번지
+        # 기존 모드버스 주소 변환 및 전송 로직
+        word = address // 10
+        bit = address % 10
+        real_modbus_address = (word * 16) + bit
         
         safe_modbus_call(client_plc.write_coil, address=real_modbus_address, value=state, slave_id=5)
-        #print(f"👉 [비트 제어] M{address:04d} (Modbus {real_modbus_address}번지)에 {state} 전송 완료")
+        # print(f"👉 [비트 제어] M{address:04d} (Modbus {real_modbus_address}번지)에 {state} 전송 완료")
+        
+        # 🌟 [신규 추가] 조작 즉시 DB에 이벤트 로그로 박제
+        if address in COMMAND_MAP:
+            action_str = "ON(동작/켜짐)" if state else "OFF(정지/꺼짐)"
+            msg = f"화면 수동 제어: {COMMAND_MAP[address]} -> {action_str}"
+            
+            import db_manager
+            # 분류를 'COMMAND'로 하고, 조작자(operator)를 'SCADA_PC'로 명시
+            event_id = db_manager.log_event_start("COMMAND", f"M{address:04d}", msg, operator="SCADA_PC")
+            
+            # 명령 하달은 상태 유지가 아닌 '순간의 조작'이므로, 기록 즉시 마감하여 duration을 0으로 만듦
+            if event_id:
+                db_manager.log_event_end(event_id, "COMMAND")
 
 def write_plc_register(address, value):
     if client_plc and client_plc.is_socket_open():
