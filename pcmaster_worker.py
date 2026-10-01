@@ -148,49 +148,61 @@ def serial_receive_thread():
                 수집데이터 = [0] * len(DATA_LABELS) 
                 
                 # =============================================================
-                # ⚡ [그룹 A] 전력 계전기 통신 (국번 6, 1, 2, 3) 
+                # ⚡ [그룹 A] 전력 계전기 통신 (국번 6, 1, 2, 3)
                 # =============================================================
                 if client_relay.is_socket_open():
                     current_step = "계전기(국번 6) 데이터 읽기"
-                    res_kep = safe_modbus_call(client_relay.read_input_registers, address=4, count=32, slave_id=6)
+                    # 🌟 변경: 4번지부터 32워드 -> 0번지부터 36워드로 변경 (이벤트 비트 4워드 포함)
+                    res_kep = safe_modbus_call(client_relay.read_input_registers, address=0, count=36, slave_id=6)
                     if res_kep and not res_kep.isError():
                         통신성공_여부 = True
-                        # 🌟 32비트 조합 함수(to_32bit)를 적용하여 올바른 숫자로 복원
-                        수집데이터[4] = to_32bit(res_kep.registers, 0) / 1000.0; 수집데이터[5] = to_32bit(res_kep.registers, 2) / 1000.0   
-                        수집데이터[6] = to_32bit(res_kep.registers, 4) / 1000.0; 수집데이터[7] = to_32bit(res_kep.registers, 6) / 1000.0   
-                        수집데이터[8] = to_32bit(res_kep.registers, 8) / 1000.0; 수집데이터[9] = to_32bit(res_kep.registers, 10) / 1000.0  
-                        수집데이터[10] = to_32bit(res_kep.registers, 14);      수집데이터[11] = to_32bit(res_kep.registers, 16)           
-                        수집데이터[12] = to_32bit(res_kep.registers, 18);      수집데이터[13] = to_32bit(res_kep.registers, 20)           
-                        수집데이터[14] = to_32bit(res_kep.registers, 24) / 1000.0  
-                        # 🌟 64비트 총사용량 조합 함수(to_64bit) 적용 (28, 29, 30, 31번 4개 레지스터 묶음)
-                        수집데이터[15] = to_32bit(res_kep.registers, 30) / 1000.0 
+                        
+                        # 🌟 이벤트 로그 처리 (앞의 4개 레지스터 전달)
+                        event_manager.process_relay_events(6, res_kep.registers[0:4])
+                        
+                        # 🌟 아날로그 데이터 파싱 (인덱스에 +4를 하여 기존 배열과 맞춤)
+                        수집데이터[4] = to_32bit(res_kep.registers, 4) / 1000.0; 수집데이터[5] = to_32bit(res_kep.registers, 6) / 1000.0   
+                        수집데이터[6] = to_32bit(res_kep.registers, 8) / 1000.0; 수집데이터[7] = to_32bit(res_kep.registers, 10) / 1000.0   
+                        수집데이터[8] = to_32bit(res_kep.registers, 12) / 1000.0; 수집데이터[9] = to_32bit(res_kep.registers, 14) / 1000.0  
+                        수집데이터[10] = to_32bit(res_kep.registers, 18);      수집데이터[11] = to_32bit(res_kep.registers, 20)           
+                        수집데이터[12] = to_32bit(res_kep.registers, 22);      수집데이터[13] = to_32bit(res_kep.registers, 24)           
+                        수집데이터[14] = to_32bit(res_kep.registers, 28) / 1000.0  
+                        # 총사용량
+                        수집데이터[15] = to_32bit(res_kep.registers, 34) / 1000.0 
                         
                     current_step = "계전기 TR-1(국번 1) 데이터 읽기"
-                    res_tr1 = safe_modbus_call(client_relay.read_input_registers, address=4, count=38, slave_id=1)
+                    # 🌟 변경: 4번지부터 38워드 -> 0번지부터 42워드로 변경
+                    res_tr1 = safe_modbus_call(client_relay.read_input_registers, address=0, count=42, slave_id=1)
                     if res_tr1 and not res_tr1.isError():
                         통신성공_여부 = True
-                        수집데이터[16] = to_32bit(res_tr1.registers, 0);  수집데이터[17] = to_32bit(res_tr1.registers, 2);  수집데이터[18] = to_32bit(res_tr1.registers, 4)
-                        수집데이터[19] = to_32bit(res_tr1.registers, 6);  수집데이터[20] = to_32bit(res_tr1.registers, 8);  수집데이터[21] = to_32bit(res_tr1.registers, 10)
-                        수집데이터[22] = to_32bit(res_tr1.registers, 12); 수집데이터[23] = to_32bit(res_tr1.registers, 14); 수집데이터[24] = to_32bit(res_tr1.registers, 16)
-                        수집데이터[25] = to_32bit(res_tr1.registers, 20) / 1000.0  
+                        event_manager.process_relay_events(1, res_tr1.registers[0:4])
+                        
+                        수집데이터[16] = to_32bit(res_tr1.registers, 4);  수집데이터[17] = to_32bit(res_tr1.registers, 6);  수집데이터[18] = to_32bit(res_tr1.registers, 8)
+                        수집데이터[19] = to_32bit(res_tr1.registers, 10); 수집데이터[20] = to_32bit(res_tr1.registers, 12); 수집데이터[21] = to_32bit(res_tr1.registers, 14)
+                        수집데이터[22] = to_32bit(res_tr1.registers, 16); 수집데이터[23] = to_32bit(res_tr1.registers, 18); 수집데이터[24] = to_32bit(res_tr1.registers, 20)
+                        수집데이터[25] = to_32bit(res_tr1.registers, 24) / 1000.0  
 
                     current_step = "계전기 TR-2(국번 2) 데이터 읽기"
-                    res_tr2 = safe_modbus_call(client_relay.read_input_registers, address=4, count=38, slave_id=2)
+                    res_tr2 = safe_modbus_call(client_relay.read_input_registers, address=0, count=42, slave_id=2)
                     if res_tr2 and not res_tr2.isError():
                         통신성공_여부 = True
-                        수집데이터[27] = to_32bit(res_tr2.registers, 0);  수집데이터[28] = to_32bit(res_tr2.registers, 2);  수집데이터[29] = to_32bit(res_tr2.registers, 4)
-                        수집데이터[30] = to_32bit(res_tr2.registers, 6);  수집데이터[31] = to_32bit(res_tr2.registers, 8);  수집데이터[32] = to_32bit(res_tr2.registers, 10)
-                        수집데이터[33] = to_32bit(res_tr2.registers, 12); 수집데이터[34] = to_32bit(res_tr2.registers, 14); 수집데이터[35] = to_32bit(res_tr2.registers, 16)
-                        수집데이터[36] = to_32bit(res_tr2.registers, 20) / 1000.0  
+                        event_manager.process_relay_events(2, res_tr2.registers[0:4])
+                        
+                        수집데이터[27] = to_32bit(res_tr2.registers, 4);  수집데이터[28] = to_32bit(res_tr2.registers, 6);  수집데이터[29] = to_32bit(res_tr2.registers, 8)
+                        수집데이터[30] = to_32bit(res_tr2.registers, 10); 수집데이터[31] = to_32bit(res_tr2.registers, 12); 수집데이터[32] = to_32bit(res_tr2.registers, 14)
+                        수집데이터[33] = to_32bit(res_tr2.registers, 16); 수집데이터[34] = to_32bit(res_tr2.registers, 18); 수집데이터[35] = to_32bit(res_tr2.registers, 20)
+                        수집데이터[36] = to_32bit(res_tr2.registers, 24) / 1000.0  
 
                     current_step = "계전기 TR-3(국번 3) 데이터 읽기"
-                    res_tr3 = safe_modbus_call(client_relay.read_input_registers, address=4, count=38, slave_id=3)
+                    res_tr3 = safe_modbus_call(client_relay.read_input_registers, address=0, count=42, slave_id=3)
                     if res_tr3 and not res_tr3.isError():
                         통신성공_여부 = True
-                        수집데이터[38] = to_32bit(res_tr3.registers, 0);  수집데이터[39] = to_32bit(res_tr3.registers, 2);  수집데이터[40] = to_32bit(res_tr3.registers, 4)
-                        수집데이터[41] = to_32bit(res_tr3.registers, 6);  수집데이터[42] = to_32bit(res_tr3.registers, 8);  수집데이터[43] = to_32bit(res_tr3.registers, 10)
-                        수집데이터[44] = to_32bit(res_tr3.registers, 12); 수집데이터[45] = to_32bit(res_tr3.registers, 14); 수집데이터[46] = to_32bit(res_tr3.registers, 16)
-                        수집데이터[47] = to_32bit(res_tr3.registers, 20) / 1000.0  
+                        event_manager.process_relay_events(3, res_tr3.registers[0:4])
+                        
+                        수집데이터[38] = to_32bit(res_tr3.registers, 4);  수집데이터[39] = to_32bit(res_tr3.registers, 6);  수집데이터[40] = to_32bit(res_tr3.registers, 8)
+                        수집데이터[41] = to_32bit(res_tr3.registers, 10); 수집데이터[42] = to_32bit(res_tr3.registers, 12); 수집데이터[43] = to_32bit(res_tr3.registers, 14)
+                        수집데이터[44] = to_32bit(res_tr3.registers, 16); 수집데이터[45] = to_32bit(res_tr3.registers, 18); 수집데이터[46] = to_32bit(res_tr3.registers, 20)
+                        수집데이터[47] = to_32bit(res_tr3.registers, 24) / 1000.0
                 
                 # =============================================================
                 # 🏭 [그룹 B] LS PLC 통신 (국번 5) - 새 메모리 맵 반영

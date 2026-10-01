@@ -66,3 +66,98 @@ def process_plc_events(current_bits):
                         #print(f"[{saved_e_type}] {start_msg} 해제 (시간 및 리셋 상태 저장 완료)")
 
     last_plc_bits = current_bits[:]
+
+    # event_manager.py
+import db_manager
+
+# --- (기존 last_plc_bits, active_events 및 PLC_TAG_MAP 부분 유지) ---
+
+# =====================================================================
+# 🌟 [신규 추가] 계전기용 이벤트 맵 및 상태 변수
+# =====================================================================
+
+# GIPAM115Fi (수전반 - 국번 6) 이벤트 맵
+# 키 구성: (레지스터 오프셋, 비트 인덱스)
+GIPAM_TAG_MAP = {
+    # 30001번지 (오프셋 0): DI/DO 접점 상태
+    (0, 4): ("STATUS", "MAIN_CB_ON", "수전반 VCB 투입(ON)"),
+    (0, 5): ("STATUS", "MAIN_CB_OFF", "수전반 VCB 개방(OFF)"),
+    
+    # 30003번지 (오프셋 2): 보호계전기(Fault) 트립 상태
+    (2, 0): ("ALARM", "OCR_R", "수전반 과전류(OCR) R상 트립"),
+    (2, 1): ("ALARM", "OCR_S", "수전반 과전류(OCR) S상 트립"),
+    (2, 2): ("ALARM", "OCR_T", "수전반 과전류(OCR) T상 트립"),
+    (2, 3): ("ALARM", "OCGR",  "수전반 지락과전류(OCGR) 트립"),
+    (2, 4): ("ALARM", "OVR_R", "수전반 과전압(OVR) R상 트립"),
+    (2, 7): ("ALARM", "UVR_R", "수전반 부족전압(UVR) R상 트립"),
+    (2, 11): ("ALARM", "SGR",  "수전반 선택지락(SGR) 트립")
+}
+
+# GIMAC-IV (변압기반 - 국번 1, 2, 3) 이벤트 맵
+GIMAC_TAG_MAP = {
+    # 30002번지 (오프셋 1): F111 포맷 (DO / CB 상태)
+    (1, 15): ("STATUS", "TR_CB_ON", "변압기반 ACB 투입(ON)"),
+    (1, 14): ("STATUS", "TR_CB_OFF", "변압기반 ACB 개방(OFF)"),
+    
+    # 30003번지 (오프셋 2): F112 포맷 (시스템 및 기기 알람)
+    (2, 8):  ("ALARM", "TR_SYS_ERR", "변압기반 시스템 에러 발생"),
+    (2, 10): ("ALARM", "TR_ALARM", "변압기반 내부 알람 발생"),
+    (2, 11): ("ALARM", "TR_EVENT", "변압기반 이벤트 발생")
+}
+
+# 계전기 상태 저장을 위한 글로벌 변수 초기화
+last_relay_bits = {1: {}, 2: {}, 3: {}, 6: {}}
+active_relay_events = {}
+
+def process_relay_events(slave_id, registers):
+    """
+    모드버스에서 읽어온 4개의 워드(30001 ~ 30004)를 분석하여
+    상태 변화 시 alarm_event_logs 테이블에 기록합니다.
+    """
+    global last_relay_bits, active_relay_events
+    
+    if not registers or len(registers) < 4: 
+        return
+        
+    tag_map = GIPAM_TAG_MAP if slave_id == 6 else GIMAC_TAG_MAP
+    prefix = "수전반(MAIN)" if slave_id == 6 else f"TR-0{slave_id}반"
+    
+    # 4개 워드(64비트)를 (레지스터 인덱스, 비트 인덱스) 형태의 딕셔너리로 분해
+    current_bits = {}
+    for reg_idx, reg_val in enumerate(registers[:4]):
+        for bit_idx in range(16):
+            current_bits[(reg_idx, bit_idx)] = (reg_val >> bit_idx) & 1
+            
+    # 최초 실행 시 초기화만 하고 리턴
+    if not last_relay_bits[slave_id]:
+        last_relay_bits[slave_id] = current_bits
+        return
+
+    # 상태 변화 감지 및 DB 로깅
+    for key, curr_state in current_bits.items():
+        prev_state = last_relay_bits[slave_id].get(key, 0)
+        
+        if curr_state != prev_state:
+            if key in tag_map:
+                e_type, tag_name, msg_suffix = tag_map[key]
+                
+                # 변압기반의 경우 어떤 기기인지 구분하기 위해 접두사 추가
+                equip_name = f"ID{slave_id}_{tag_name}"
+                full_msg = msg_suffix if slave_id == 6 else f"[{prefix}] {msg_suffix}"
+                
+                event_key = f"{slave_id}_{key[0]}_{key[1]}"
+                
+                if curr_state == 1:
+                    # 이벤트 시작 기록
+                    event_id = db_manager.log_event_start(e_type, equip_name, full_msg)
+                    if event_id:
+                        active_relay_events[event_key] = (event_id, e_type)
+                elif curr_state == 0:
+                    # 이벤트 해제 및 마감 기록
+                    if event_key in active_relay_events:
+                        event_id, saved_e_type = active_relay_events.pop(event_key)
+                        db_manager.log_event_end(event_id, saved_e_type)
+                        
+    # 현재 상태를 과거 상태로 업데이트
+    last_relay_bits[slave_id] = current_bits
+    
