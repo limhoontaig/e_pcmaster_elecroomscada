@@ -38,9 +38,16 @@ class SCADAWindow(QMainWindow):
         # 2. 정기 자동 백업 타이머 추가 (1시간 주기)
         self.backup_timer = QTimer(self)
         self.backup_timer.timeout.connect(self.check_daily_backup)
-        self.backup_timer.start(3600000) 
-        
+        self.backup_timer.start(3600000)         
         self.last_backup_date = datetime.now().strftime("%Y-%m-%d")
+
+        # 🌟 3. 신규: 1초 단위 실시간 시계 타이머
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self.update_clock)
+        self.clock_timer.start(1000) # 1초마다 틱
+        
+        # 👈 [핵심 추가] 1초를 기다리지 않고 프로그램 시작 즉시 시계 표시
+        self.update_clock()
 
     def initUI(self):
         icon_path = self.resource_path("free-icon-folder-2015058.ico")
@@ -203,43 +210,61 @@ class SCADAWindow(QMainWindow):
         
         report_header = QLabel("📊 SCADA 종합 통계 및 분석 보고서 포털")
         report_header.setAlignment(Qt.AlignCenter)
-        report_header.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin: 30px 0;")
+        report_header.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin: 15px 0;")
         report_layout.addWidget(report_header)
 
-        # 메뉴 버튼들을 담을 그리드 레이아웃
-        from PyQt5.QtWidgets import QGridLayout
-        menu_grid = QGridLayout()
-        menu_grid.setSpacing(20)
+        # --- [1] 중간 메뉴 버튼 4개를 가로 1줄로 배치 (세로 공간 확보) ---
+        menu_layout = QHBoxLayout()
+        menu_layout.setSpacing(15) # 버튼 사이 간격
 
-        # 1. 전력 사용량 보고서 버튼
-        self.btn_rep_power = QPushButton("⚡ 전력 사용량 종합 통계\n(일/월/연간 변압기 부하 분석)")
-        self.btn_rep_power.setMinimumHeight(100)
-        self.btn_rep_power.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #34495e; color: white; border-radius: 10px;")
+        self.btn_rep_power = QPushButton("⚡ 전력 사용량 통계")
+        self.btn_rep_power.setMinimumHeight(60)
+        self.btn_rep_power.setStyleSheet("font-size: 15px; font-weight: bold; background-color: #34495e; color: white; border-radius: 8px;")
         self.btn_rep_power.clicked.connect(self.open_power_report_dialog)
         
-        # 2. 온도 추이 분석 버튼 (추후 개발)
-        self.btn_rep_temp = QPushButton("🌡️ 온도 추이 상세 분석\n(변압기 및 실내외 온도 변화)")
-        self.btn_rep_temp.setMinimumHeight(100)
-        self.btn_rep_temp.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #e67e22; color: white; border-radius: 10px;")
+        self.btn_rep_temp = QPushButton("🌡 온도 추이 분석")
+        self.btn_rep_temp.setMinimumHeight(60)
+        self.btn_rep_temp.setStyleSheet("font-size: 15px; font-weight: bold; background-color: #e67e22; color: white; border-radius: 8px;")
         
-        # 3. 설비 가동시간 보고서 버튼 (추후 개발)
-        self.btn_rep_fan = QPushButton("💨 냉각/환기설비 가동 분석\n(팬 모터 운전시간 및 효율)")
-        self.btn_rep_fan.setMinimumHeight(100)
-        self.btn_rep_fan.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #2980b9; color: white; border-radius: 10px;")
+        self.btn_rep_fan = QPushButton("💨 냉각/환기설비 분석")
+        self.btn_rep_fan.setMinimumHeight(60)
+        self.btn_rep_fan.setStyleSheet("font-size: 15px; font-weight: bold; background-color: #2980b9; color: white; border-radius: 8px;")
         
-        # 4. 현장 점검 및 알람 이력 (추후 개발)
-        self.btn_rep_alarm = QPushButton("🚨 알람 및 현장점검 이력\n(트립 발생 및 조치 내역 통계)")
-        self.btn_rep_alarm.setMinimumHeight(100)
-        self.btn_rep_alarm.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #c0392b; color: white; border-radius: 10px;")
+        self.btn_rep_alarm = QPushButton("🚨 알람/이벤트 이력")
+        self.btn_rep_alarm.setMinimumHeight(60)
+        self.btn_rep_alarm.setStyleSheet("font-size: 15px; font-weight: bold; background-color: #c0392b; color: white; border-radius: 8px;")
 
-        # 그리드에 버튼 배치 (2x2 배열)
-        menu_grid.addWidget(self.btn_rep_power, 0, 0)
-        menu_grid.addWidget(self.btn_rep_temp, 0, 1)
-        menu_grid.addWidget(self.btn_rep_fan, 1, 0)
-        menu_grid.addWidget(self.btn_rep_alarm, 1, 1)
+        # QHBoxLayout에 순서대로 추가하면 자동으로 1줄로 꽉 차게 들어갑니다.
+        menu_layout.addWidget(self.btn_rep_power)
+        menu_layout.addWidget(self.btn_rep_temp)
+        menu_layout.addWidget(self.btn_rep_fan)
+        menu_layout.addWidget(self.btn_rep_alarm)
 
-        report_layout.addLayout(menu_grid)
-        report_layout.addStretch() # 버튼들을 위쪽으로 밀어줌
+        report_layout.addLayout(menu_layout)
+
+        # --- [2] 실시간 시계 및 테이블 타이틀 ---
+        event_header_layout = QHBoxLayout()
+        lbl_event_title = QLabel("📢 일일 설비 가동 및 경보(이벤트) 발생 현황")
+        lbl_event_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50; margin-top: 25px;")
+        
+        self.lbl_current_time = QLabel("🕒 현재 시간: 로딩 중...")
+        self.lbl_current_time.setStyleSheet("font-size: 16px; font-weight: bold; color: #16a085; margin-top: 25px;")
+        self.lbl_current_time.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        event_header_layout.addWidget(lbl_event_title)
+        event_header_layout.addStretch()
+        event_header_layout.addWidget(self.lbl_current_time)
+        report_layout.addLayout(event_header_layout)
+
+        # --- [3] 이벤트 현황 테이블 ---
+        self.alarm_table = QTableWidget()
+        from PyQt5.QtWidgets import QHeaderView
+        alarm_headers = ["ID", "발생 시간", "분류", "설비명", "이벤트/알람 내용", "조치 내역", "해제/종료 시간", "가동(초)", "조치자"]
+        self.alarm_table.setColumnCount(len(alarm_headers))
+        self.alarm_table.setHorizontalHeaderLabels(alarm_headers)
+        self.alarm_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch) # 메시지 열 확장
+        
+        report_layout.addWidget(self.alarm_table)
 
         self.stack.addWidget(self.page_report)
 
@@ -258,6 +283,37 @@ class SCADAWindow(QMainWindow):
 
         self.load_data()
 
+    def update_clock(self):
+        """1초마다 호출되어 화면의 현재 시간을 갱신합니다."""
+        # 파일 상단에 from datetime import datetime 이 있으므로 바로 datetime.now() 사용
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if hasattr(self, 'lbl_current_time'):
+            self.lbl_current_time.setText(f"🕒 현재 시간: {now_str}")
+
+    def load_alarm_data(self):
+        """선택된 날짜의 이벤트 이력을 불러와 하단 테이블에 표출합니다."""
+        target_date = self.qdate.date().toString("yyyy-MM-dd")
+        try:
+            # db_manager에서 당일 데이터 호출 (최신순)
+            rows = db_manager.get_alarm_history(target_date, target_date)
+            self.alarm_table.setRowCount(len(rows))
+            
+            for r_idx, row in enumerate(rows):
+                for c_idx, val in enumerate(row):
+                    txt = str(val) if val is not None else "-"
+                    item = QTableWidgetItem(txt)
+                    item.setTextAlignment(Qt.AlignCenter)
+                    
+                    # 3번째 열(분류)에 따른 색상 하이라이트 적용
+                    if c_idx == 2: 
+                        if val == 'ALARM': item.setForeground(Qt.darkYellow)
+                        elif val == 'TRIP': item.setForeground(Qt.red)
+                        elif val == 'OPERATION': item.setForeground(Qt.darkGreen)
+                        
+                    self.alarm_table.setItem(r_idx, c_idx, item)
+        except Exception as e:
+            print(f"알람 데이터 표출 에러: {e}")
+    
     def open_power_report_dialog(self):
         """전력 통계 보고서 전용 독립 창을 띄웁니다."""
         dialog = PowerReportDialog(self)
@@ -325,6 +381,8 @@ class SCADAWindow(QMainWindow):
                 inspection_data = db_manager.get_field_inspections_for_date(selected_date)
                 self.display_inspection_table(inspection_data)
 
+            self.load_alarm_data()
+            
         except Exception as e:
             print(f"UI 로딩 실패: {e}")
 

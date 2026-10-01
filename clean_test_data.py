@@ -1,5 +1,6 @@
+# clean_test_data.py
 import pymysql
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # 🌟 db_manager에서 DB 연결 함수, 데이터 라벨, 일계(최고/최저) 함수를 그대로 임포트합니다.
 from db_manager import get_db_raw_connection, calculate_daily_extremes, DATA_LABELS
@@ -10,22 +11,24 @@ def clean_and_recalculate():
     cursor = conn.cursor()
 
     try:
-        today = datetime.now().strftime('%Y-%m-%d')
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        # 🌟 수정된 부분: 어제/오늘 대신 특정 날짜로 직접 지정
+        target_date1 = '2026-09-29'
+        target_date2 = '2026-09-30'
 
-        # 삭제 조건 지정 (어제와 오늘 데이터 중 조건에 맞는 것)
+        # 삭제 조건 지정
         target_condition = """
             (log_date = %s OR log_date = %s)
             AND (
-                `실내온도` = 0 
-                OR `KEP_P_kWh` <= 0 
-                OR `KEP_P_kWh` > 446772800.0
+                `KEP_P_kWh` <= 44000000.0  -- 👈 비정상적으로 낮은 값 삭제
+                OR `KEP_P_kWh` > 44700000.0 -- 👈 비정상적으로 높은 값 삭제
+                OR `실내온도` = 0 
             )
         """
 
         # 2. 비정상 데이터가 포함된 날짜(date)와 시간(hour) 추출
         find_sql = f"SELECT DISTINCT log_date, HOUR(log_time) FROM raw_data WHERE {target_condition}"
-        cursor.execute(find_sql, (yesterday, today))
+        # 🌟 지정한 변수로 쿼리 실행
+        cursor.execute(find_sql, (target_date1, target_date2))
         affected_periods = cursor.fetchall()
 
         if not affected_periods:
@@ -38,7 +41,8 @@ def clean_and_recalculate():
         # 3. 비정상 데이터 삭제 (raw_data)
         print(f"🗑️ 비정상 데이터 삭제 진행 (영향받는 시간대: {len(affected_periods)}개)")
         delete_sql = f"DELETE FROM raw_data WHERE {target_condition}"
-        cursor.execute(delete_sql, (yesterday, today))
+        # 🌟 지정한 변수로 쿼리 실행
+        cursor.execute(delete_sql, (target_date1, target_date2))
         print(f"✅ 비정상 데이터 총 {cursor.rowcount}건 삭제 완료.")
 
         # 4. 시간대별 평균(hourly_avg) 재산출 및 덮어쓰기
@@ -79,7 +83,8 @@ def clean_and_recalculate():
         conn.close()
 
 if __name__ == "__main__":
-    confirm = input("⚠️ 어제와 오늘 생성된 시운전 오류 데이터를 삭제하시겠습니까? (y/n): ")
+    # 🌟 안내 메시지도 명확하게 수정
+    confirm = input("⚠️ 9월 29일과 9월 30일에 생성된 시운전 오류 데이터를 삭제하시겠습니까? (y/n): ")
     if confirm.lower() == 'y':
         clean_and_recalculate()
     else:
