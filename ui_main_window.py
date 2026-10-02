@@ -22,6 +22,7 @@ from ui_ac_settings import ACSettingsDialog
 from tr_controller import TRFanSettingsDialog
 from ui_hmi_dashboard import HMIDashboardWidget
 from ui_report_power import PowerReportDialog
+from ui_report_temp import TempReportDialog
 import pcmaster_worker 
 
 class SCADAWindow(QMainWindow):
@@ -225,7 +226,8 @@ class SCADAWindow(QMainWindow):
         self.btn_rep_temp = QPushButton("🌡 온도 추이 분석")
         self.btn_rep_temp.setMinimumHeight(60)
         self.btn_rep_temp.setStyleSheet("font-size: 15px; font-weight: bold; background-color: #e67e22; color: white; border-radius: 8px;")
-        
+        self.btn_rep_temp.clicked.connect(self.open_temp_report_dialog)
+
         self.btn_rep_fan = QPushButton("💨 냉각/환기설비 분석")
         self.btn_rep_fan.setMinimumHeight(60)
         self.btn_rep_fan.setStyleSheet("font-size: 15px; font-weight: bold; background-color: #2980b9; color: white; border-radius: 8px;")
@@ -318,6 +320,11 @@ class SCADAWindow(QMainWindow):
     def open_power_report_dialog(self):
         """전력 통계 보고서 전용 독립 창을 띄웁니다."""
         dialog = PowerReportDialog(self)
+        dialog.exec_()
+
+    def open_temp_report_dialog(self):
+        """온도 보고서 전용 독립 창을 띄웁니다."""
+        dialog = TempReportDialog(self)
         dialog.exec_()
 
     def open_ac_settings_dialog(self, event):
