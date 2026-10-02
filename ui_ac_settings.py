@@ -12,7 +12,7 @@ class ACSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("⚙️ 에어컨 및 환기팬 종합 제어 (관리자 전용)")
         # 💡 내용이 많아졌으므로 세로 높이를 420에서 580으로 살짝 키웠습니다.
-        self.setFixedSize(380, 300)
+        self.setFixedSize(380, 450)
         self.config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
         self.config = configparser.ConfigParser()
         self.init_ui()
@@ -60,7 +60,8 @@ class ACSettingsDialog(QDialog):
         # 3. 수동 제어 그룹 (기존)
         # ---------------------------------------------------------
         self.group_manual = QGroupBox("에어컨 수동 원격 제어 (즉시 동작)")
-        manual_layout = QHBoxLayout()
+        # 🌟 가로(QHBoxLayout)가 아닌 세로(QVBoxLayout)로 변경하여 층층이 쌓이게 합니다.
+        manual_layout = QVBoxLayout() 
 
         row1_layout = QHBoxLayout()
         btn_on_1 = QPushButton("1호기 켜기")
@@ -70,7 +71,8 @@ class ACSettingsDialog(QDialog):
         btn_off_1 = QPushButton("1호기 끄기")
         btn_off_1.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px;")
         btn_off_1.clicked.connect(lambda: self.trigger_manual("OFF_1"))
-        row1_layout.addWidget(btn_on_1); row1_layout.addWidget(btn_off_1)
+        row1_layout.addWidget(btn_on_1)
+        row1_layout.addWidget(btn_off_1)
 
         row2_layout = QHBoxLayout()
         btn_on_2 = QPushButton("2호기 켜기")
@@ -80,15 +82,18 @@ class ACSettingsDialog(QDialog):
         btn_off_2 = QPushButton("2호기 끄기")
         btn_off_2.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px;")
         btn_off_2.clicked.connect(lambda: self.trigger_manual("OFF_2"))
-        row2_layout.addWidget(btn_on_2); row2_layout.addWidget(btn_off_2)
+        row2_layout.addWidget(btn_on_2)
+        row2_layout.addWidget(btn_off_2)
 
         btn_off_all = QPushButton("전체 끄기")
         btn_off_all.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px; font-weight: bold;")
         btn_off_all.clicked.connect(lambda: self.trigger_manual("OFF_ALL"))
         
-        manual_layout.addWidget(btn_on_1)
-        manual_layout.addWidget(btn_on_2)
+        # 🌟 개별 버튼 대신, 버튼이 담긴 row(가로줄) 전체를 순서대로 화면에 넣습니다.
+        manual_layout.addLayout(row1_layout)
+        manual_layout.addLayout(row2_layout)
         manual_layout.addWidget(btn_off_all)
+        
         self.group_manual.setLayout(manual_layout)
         layout.addWidget(self.group_manual)
         
