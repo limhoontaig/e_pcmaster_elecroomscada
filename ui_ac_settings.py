@@ -20,9 +20,16 @@ class ACSettingsDialog(QDialog):
 
     def init_ui(self):
         layout = QVBoxLayout()
+
+        # ---------------------------------------------------------
+        # 1. 모드 전환 버튼 (신규 추가)
+        # ---------------------------------------------------------
+        self.btn_mode_toggle = QPushButton()
+        self.btn_mode_toggle.clicked.connect(self.toggle_mode)
+        layout.addWidget(self.btn_mode_toggle)
         
         # ---------------------------------------------------------
-        # 1. 에어컨 자동 제어 그룹 (기존)
+        # 2. 에어컨 자동 제어 그룹 (기존)
         # ---------------------------------------------------------
         group_auto = QGroupBox("에어컨(AC) 자동 제어 설정")
         auto_layout = QVBoxLayout()
@@ -52,17 +59,29 @@ class ACSettingsDialog(QDialog):
         # ---------------------------------------------------------
         # 3. 수동 제어 그룹 (기존)
         # ---------------------------------------------------------
-        group_manual = QGroupBox("에어컨 수동 원격 제어 (즉시 동작)")
+        self.group_manual = QGroupBox("에어컨 수동 원격 제어 (즉시 동작)")
         manual_layout = QHBoxLayout()
-        
+
+        row1_layout = QHBoxLayout()
         btn_on_1 = QPushButton("1호기 켜기")
         btn_on_1.setStyleSheet("background-color: #3498db; color: white; padding: 8px;")
         btn_on_1.clicked.connect(lambda: self.trigger_manual("ON_1"))
-        
+
+        btn_off_1 = QPushButton("1호기 끄기")
+        btn_off_1.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px;")
+        btn_off_1.clicked.connect(lambda: self.trigger_manual("OFF_1"))
+        row1_layout.addWidget(btn_on_1); row1_layout.addWidget(btn_off_1)
+
+        row2_layout = QHBoxLayout()
         btn_on_2 = QPushButton("2호기 켜기")
         btn_on_2.setStyleSheet("background-color: #9b59b6; color: white; padding: 8px;")
         btn_on_2.clicked.connect(lambda: self.trigger_manual("ON_2"))
-        
+
+        btn_off_2 = QPushButton("2호기 끄기")
+        btn_off_2.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px;")
+        btn_off_2.clicked.connect(lambda: self.trigger_manual("OFF_2"))
+        row2_layout.addWidget(btn_on_2); row2_layout.addWidget(btn_off_2)
+
         btn_off_all = QPushButton("전체 끄기")
         btn_off_all.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px; font-weight: bold;")
         btn_off_all.clicked.connect(lambda: self.trigger_manual("OFF_ALL"))
@@ -70,16 +89,57 @@ class ACSettingsDialog(QDialog):
         manual_layout.addWidget(btn_on_1)
         manual_layout.addWidget(btn_on_2)
         manual_layout.addWidget(btn_off_all)
-        group_manual.setLayout(manual_layout)
-        layout.addWidget(group_manual)
+        self.group_manual.setLayout(manual_layout)
+        layout.addWidget(self.group_manual)
         
         self.setLayout(layout)
+        self.update_mode_ui()
 
     def add_row(self, layout, label_text, widget):
         row = QHBoxLayout()
         row.addWidget(QLabel(label_text))
         row.addWidget(widget)
         layout.addLayout(row)
+
+    # ---------------------------------------------------------
+    # 💡 신규 로직: 자동/수동 상태 토글 및 UI 갱신
+    # ---------------------------------------------------------
+    def toggle_mode(self):
+        ac_manager.is_auto = not ac_manager.is_auto
+        self.update_mode_ui()
+
+    def update_mode_ui(self):
+        """현재 is_auto 상태에 맞게 버튼 색상과 수동 조작 영역 활성화 여부를 바꿉니다."""
+        if ac_manager.is_auto:
+            self.btn_mode_toggle.setText("현재 모드: 🔄 자동 (수동 조작하려면 여기를 클릭)")
+            self.btn_mode_toggle.setStyleSheet("background-color: #2ecc71; color: white; padding: 10px; font-weight: bold;")
+            self.group_manual.setEnabled(False) # 수동 버튼들 클릭 잠금
+        else:
+            self.btn_mode_toggle.setText("현재 모드: ✋ 수동 (자동으로 복귀하려면 여기를 클릭)")
+            self.btn_mode_toggle.setStyleSheet("background-color: #e67e22; color: white; padding: 10px; font-weight: bold;")
+            self.group_manual.setEnabled(True)  # 수동 버튼들 클릭 잠금 해제
+
+    # ---------------------------------------------------------
+    # 💡 안전 장치: 창을 열거나 닫을 때 무조건 '자동 모드'로 안전 복귀
+    # ---------------------------------------------------------
+    def showEvent(self, event):
+        """창이 열릴 때는 기본적으로 자동 모드를 유지합니다."""
+        ac_manager.is_auto = True
+        self.update_mode_ui()
+        super().showEvent(event)
+
+    def closeEvent(self, event):
+        """창을 닫고 나갈 때는 수동으로 놔두었더라도 안전을 위해 무조건 자동으로 복귀시킵니다."""
+        ac_manager.is_auto = True
+        super().closeEvent(event)
+
+    def accept(self):
+        ac_manager.is_auto = True
+        super().accept()
+
+    def reject(self):
+        ac_manager.is_auto = True
+        super().reject()
 
     def load_settings(self):
         if os.path.exists(self.config_path):
@@ -126,5 +186,5 @@ class ACSettingsDialog(QDialog):
 
     def trigger_manual(self, action):
         ac_manager.force_manual_control(action)  
-        action_names = {"ON_1": "1호기 켜기", "ON_2": "2호기 켜기", "OFF_ALL": "전체 에어컨 끄기"}
+        action_names = {"ON_1": "1호기 켜기", "ON_2": "2호기 켜기", "OFF_1": "1호기 끄기", "OFF_2": "2호기 끄기", "OFF_ALL": "전체 에어컨 끄기"}
         QMessageBox.information(self, "수동 제어", f"[{action_names[action]}] 명령이 전송되었습니다.\n자동 타이머가 초기화됩니다.")

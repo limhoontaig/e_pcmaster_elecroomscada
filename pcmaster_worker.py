@@ -320,7 +320,7 @@ def serial_receive_thread():
                             last_max_calc_time = now_t
                             is_first_tr_send = False
                     
-                    current_step = "PLC(국번 5) 에어컨 컨트롤러 로직 쓰기 (D2000)"
+                    current_step = "PLC(국번 5) 에어컨 컨트롤러 로직 쓰기 (D957,D958)"
                     if 통신성공_여부:
                         ac_manager.check_and_control(
                             indoor_temp=수집데이터[0],      
@@ -329,7 +329,7 @@ def serial_receive_thread():
                             dis_temp2=수집데이터[50], 
                             total_load=수집데이터[14]       
                         )
-                        safe_modbus_call(client_plc.write_register, address=957, value=ac_manager.fan_control_cmd, slave_id=5)
+                        safe_modbus_call(client_plc.write_register, address=957, values=[ac_manager.ac1_cmd, ac_manager.ac2_cmd], slave_id=5)
 
                 # =============================================================
                 # [6] DB 로깅 (58초마다 기록)
