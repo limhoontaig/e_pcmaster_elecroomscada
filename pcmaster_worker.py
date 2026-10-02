@@ -76,6 +76,8 @@ pending_tr_fan_values = None
 vent_settings = None
 last_sent_vent_targets = None
 is_running = True
+last_plc_heartbeat_val = None
+last_plc_heartbeat_time = 0
 
 tr1_buffer = []
 tr2_buffer = []
@@ -229,13 +231,13 @@ def serial_receive_thread():
                     current_step = "PLC(국번 5) 상태 비트 읽기 (M0200~M0220)"
                     
                     # 🌟 M0200의 실제 Modbus 시작 번지는 320 ((20 * 16) + 0 = 320)
-                    # M0220(352번지)까지 포함하여 총 33칸을 읽어옵니다.
-                    res_coils = safe_modbus_call(client_plc.read_coils, address=320, count=35, slave_id=5)
+                    # M0220(352번지)까지 포함하여 총 40 칸을 읽어옵니다.
+                    res_coils = safe_modbus_call(client_plc.read_coils, address=320, count=40, slave_id=5)
                     
                     if res_coils and not res_coils.isError():
                         clean_bits = [] # A~F가 제거된 순수한 0~9 비트만 담을 리스트
                         
-                        for i, state in enumerate(res_coils.bits[:35]):
+                        for i, state in enumerate(res_coils.bits[:40]):
                             modbus_addr = 320 + i
                             bit = modbus_addr % 16 # 현재 주소의 비트 자리수 (0~15)
                             
@@ -246,6 +248,21 @@ def serial_receive_thread():
                         # 완성된 clean_bits는 우리가 설계한 순서(M0200...M0209, M0210...)와 정확히 일치합니다.
                         event_manager.process_plc_events(clean_bits)
                         comm_signal.plc_status_update.emit(clean_bits)
+
+                    current_step = "PLC(국번 5) 하트비트(생존) 검사"
+                    if 통신성공_여부 and len(clean_bits) > 25:
+                        current_hb = clean_bits[25] # M0225 하트비트 비트
+                        now_t = time.time()
+                        
+                        # 값이 0 -> 1 또는 1 -> 0으로 변했다면 정상 (시간 갱신)
+                        if current_hb != last_plc_heartbeat_val:
+                            last_plc_heartbeat_val = current_hb
+                            last_plc_heartbeat_time = now_t
+                        
+                        # 🌟 만약 5초 이상 값이 안 변했다면 PLC CPU가 멈춘(STOP) 것!
+                        if now_t - last_plc_heartbeat_time > 5.0:
+                            통신성공_여부 = False
+                            # print("⚠️ PLC 통신은 되나 래더(CPU)가 정지됨!")
                         
                     current_step = "PLC(국번 5) 센서 워드 읽기 (D0950)"
                     res_plc = safe_modbus_call(client_plc.read_holding_registers, address=950, count=7, slave_id=5)

@@ -1,9 +1,13 @@
 # event_manager.py
 
+import time
 import db_manager
 
 last_plc_bits = []
 active_events = {}
+
+# 🌟 [신규 추가] 국번별 마지막 출력 시간을 저장하는 딕셔너리 (파일 상단에 선언)
+_debug_print_time = {1: 0, 2: 0, 3: 0, 6: 0}
 
 # M0200~M0220 비트 인덱스 매핑: (이벤트 분류, 영문 태그명, 화면 및 DB 기록용 한글 메시지)
 PLC_TAG_MAP = {
@@ -163,3 +167,28 @@ def process_relay_events(slave_id, registers):
                         
     # 현재 상태를 과거 상태로 업데이트
     last_relay_bits[slave_id] = current_bits
+
+    # 🌟 [신규 추가] 함수 맨 아래쪽에 10초 주기 디버그 프린트 로직 삽입
+    current_time = time.time()
+    if current_time - _debug_print_time.get(relay_id, 0) >= 10.0:
+        print(f"\n==================================================")
+        print(f" 📡 [디버그] 계전기(국번 {relay_id}) 통신 상태 확인")
+        print(f"==================================================")
+        
+        # 워드 배열을 비트 배열로 변환 (기존 로직과 동일하게)
+        bits = []
+        for reg in registers:
+            for i in range(16):
+                bits.append((reg >> i) & 1)
+                
+        # 매핑된 이벤트들의 현재 상태를 모두 출력
+        for bit_index, (evt_type, evt_code, evt_name) in RELAY_EVENT_MAP.items():
+            if bit_index < len(bits):
+                # 1이면 빨간색 ON, 0이면 흰색 OFF로 가독성 좋게 출력
+                state_str = "🔴 ON(발생)" if bits[bit_index] else "⚪ OFF"
+                print(f" - {evt_name} [{evt_code}]: {state_str}")
+        
+        print(f"==================================================\n")
+        
+        # 마지막 출력 시간 갱신
+        _debug_print_time[slave_id] = current_time
