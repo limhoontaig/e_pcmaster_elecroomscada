@@ -168,27 +168,25 @@ def process_relay_events(slave_id, registers):
     # 현재 상태를 과거 상태로 업데이트
     last_relay_bits[slave_id] = current_bits
 
-    # 🌟 [신규 추가] 함수 맨 아래쪽에 10초 주기 디버그 프린트 로직 삽입
-    current_time = time.time()
-    if current_time - _debug_print_time.get(relay_id, 0) >= 10.0:
-        print(f"\n==================================================")
-        print(f" 📡 [디버그] 계전기(국번 {relay_id}) 통신 상태 확인")
-        print(f"==================================================")
+    # # 🌟 [수정] 현재 코드 구조(GIPAM / GIMAC)에 맞춘 10초 주기 디버그 프린트 로직
+    # current_time = time.time()
+    # if current_time - _debug_print_time.get(slave_id, 0) >= 10.0:
+    #     print(f"\n==================================================")
+    #     print(f" 📡 [디버그] 계전기(국번 {slave_id}) 통신 상태 확인")
+    #     print(f"==================================================")
         
-        # 워드 배열을 비트 배열로 변환 (기존 로직과 동일하게)
-        bits = []
-        for reg in registers:
-            for i in range(16):
-                bits.append((reg >> i) & 1)
+    #     # 국번에 따라 맵을 다르게 선택
+    #     debug_tag_map = GIPAM_TAG_MAP if slave_id == 6 else GIMAC_TAG_MAP
+        
+    #     # 맵에 정의된 이벤트들의 현재 상태를 뽑아서 출력
+    #     for (reg_idx, bit_idx), (evt_type, evt_code, evt_name) in debug_tag_map.items():
+    #         if reg_idx < len(registers):
+    #             # 해당 레지스터에서 비트값 추출
+    #             bit_val = (registers[reg_idx] >> bit_idx) & 1
+    #             state_str = "🔴 ON(발생)" if bit_val else "⚪ OFF"
+    #             print(f" - {evt_name} [{evt_code}]: {state_str}")
                 
-        # 매핑된 이벤트들의 현재 상태를 모두 출력
-        for bit_index, (evt_type, evt_code, evt_name) in RELAY_EVENT_MAP.items():
-            if bit_index < len(bits):
-                # 1이면 빨간색 ON, 0이면 흰색 OFF로 가독성 좋게 출력
-                state_str = "🔴 ON(발생)" if bits[bit_index] else "⚪ OFF"
-                print(f" - {evt_name} [{evt_code}]: {state_str}")
+    #     print(f"==================================================\n")
         
-        print(f"==================================================\n")
-        
-        # 마지막 출력 시간 갱신
-        _debug_print_time[slave_id] = current_time
+    #     # 마지막 출력 시간 갱신
+    #     _debug_print_time[slave_id] = current_time
