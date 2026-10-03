@@ -15,7 +15,7 @@ try:
 except ImportError:
     openpyxl = None
 
-# 🌟 [신규 추가] matplotlib 및 pandas 임포트 (기존 pyqtgraph 대체)
+# matplotlib 및 pandas 임포트
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -31,12 +31,10 @@ class TempReportDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("🌡 온도 및 부하 최고/최저 상관관계 분석 보고서")
-        self.resize(1400, 850)
+        self.resize(1450, 850) # 열이 늘어나서 창 크기를 약간 더 넓혔습니다.
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         
-        # 데이터를 임시 저장할 변수 (리스트 박스 클릭 시 매번 DB를 조회하지 않도록 함)
         self.current_rows = []
-        
         self.init_ui()
 
     def init_ui(self):
@@ -75,7 +73,6 @@ class TempReportDialog(QDialog):
         
         main_layout.addLayout(btn_layout)
         
-        # 마지막에 데이터 로딩
         self.load_data()
 
     def init_table_tab(self):
@@ -112,10 +109,11 @@ class TempReportDialog(QDialog):
         layout.addLayout(ctrl_layout)
 
         self.table = QTableWidget()
-        # 그래프에서 사용할 데이터 항목 이름들을 멤버 변수로 정의합니다.
+        # 💡 [핵심 보완] 총전력(KEP_P_kW) 항목 추가 (총 18열 데이터)
         self.data_labels = [
             "외기 최저(℃)", "외기 최고(℃)", 
             "실내 최저(℃)", "실내 최고(℃)", 
+            "총전력 최저(kW)", "총전력 최고(kW)", 
             "TR1부하 최저", "TR1부하 최고", "TR1온도 최저", "TR1온도 최고", 
             "TR2부하 최저", "TR2부하 최고", "TR2온도 최저", "TR2온도 최고", 
             "TR3부하 최저", "TR3부하 최고", "TR3온도 최저", "TR3온도 최고"
@@ -126,7 +124,8 @@ class TempReportDialog(QDialog):
         self.table.setHorizontalHeaderLabels(headers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         
-        warning_lbl = QLabel("※ 주의: 실내 최고온도 35℃ 이상, 변압기 최고온도 90℃ 이상 도달 시 적색으로 경고 표시됩니다.")
+        # 안내 문구 디테일 업데이트
+        warning_lbl = QLabel("※ 주의: 실내 35℃, TR온도 60℃ / 부하(총전력 1750kW, TR1 500kW, TR2·3 625kW) 이상 도달 시 적색 경고 표시")
         warning_lbl.setStyleSheet("color: #c0392b; font-weight: bold;")
         layout.addWidget(warning_lbl)
         layout.addWidget(self.table)
@@ -139,22 +138,16 @@ class TempReportDialog(QDialog):
             self.combo_month.setVisible(False)
             self.combo_year.setVisible(True)
 
-    # =====================================================================
-    # 🌟 [핵심 개편] matplotlib 기반의 리스트 박스 다중 선택 이중축 그래프
-    # =====================================================================
     def init_graph_tab(self):
         layout = QVBoxLayout(self.tab_graph)
         
-        # 1. 상단 컨트롤 영역 (리스트 박스)
         graph_ctrl = QHBoxLayout()
         
-        # [왼쪽 축] 표시할 전체 데이터 선택
         self.data_selector = QListWidget()
         self.data_selector.setSelectionMode(QAbstractItemView.MultiSelection) 
         self.data_selector.addItems(self.data_labels)
         self.data_selector.setMaximumHeight(100) 
         
-        # [오른쪽 이중축] 왼쪽에서 선택된 항목 중 오른쪽 축에 그릴 항목 선택
         self.right_axis_selector = QListWidget()
         self.right_axis_selector.setSelectionMode(QAbstractItemView.MultiSelection)
         self.right_axis_selector.setMaximumHeight(100) 
@@ -166,25 +159,23 @@ class TempReportDialog(QDialog):
         
         layout.addLayout(graph_ctrl)
 
-        # 2. matplotlib 캔버스 생성
         self.canvas = FigureCanvas(Figure(figsize=(10, 5)))
         self.ax = self.canvas.figure.add_subplot(111)
         layout.addWidget(self.canvas)
 
-        # 3. 이벤트 연결
         self.data_selector.itemSelectionChanged.connect(self.sync_right_axis_list)
         self.right_axis_selector.itemSelectionChanged.connect(self.trigger_graph_update)
 
-        # 4. 초기 기본 선택 세팅 (사용자가 빈 화면을 보지 않도록 유도)
+        # 초기 기본 선택 세팅 (총전력, 실내최고, TR1온도)
         self.data_selector.blockSignals(True)
         self.data_selector.item(1).setSelected(True) # 외기 최고
         self.data_selector.item(3).setSelected(True) # 실내 최고
-        self.data_selector.item(7).setSelected(True) # TR1 온도 최고
+        self.data_selector.item(5).setSelected(True) # 총전력 최고
+        self.data_selector.item(9).setSelected(True) # TR1 온도 최고
         self.data_selector.blockSignals(False)
-        self.sync_right_axis_list() # 오른쪽 축 리스트 업데이트
+        self.sync_right_axis_list()
 
     def sync_right_axis_list(self):
-        """왼쪽에서 선택된 항목들만 오른쪽 축 선택 박스에 나타나도록 동기화"""
         self.data_selector.blockSignals(True)
         self.right_axis_selector.blockSignals(True)
         try:
@@ -194,7 +185,6 @@ class TempReportDialog(QDialog):
             self.right_axis_selector.clear()
             if left_selected:
                 self.right_axis_selector.addItems(left_selected)
-                # 이전에 이중축으로 선택해둔 항목이 여전히 있다면 선택 유지
                 for i in range(self.right_axis_selector.count()):
                     item = self.right_axis_selector.item(i)
                     if item.text() in prev_selected:
@@ -206,7 +196,6 @@ class TempReportDialog(QDialog):
         self.trigger_graph_update()
 
     def trigger_graph_update(self):
-        """리스트 박스 클릭 시 DB 조회 없이 기존 데이터(self.current_rows)로 그래프만 다시 그림"""
         if hasattr(self, 'current_rows') and self.current_rows:
             self.update_graph(self.current_rows)
 
@@ -216,12 +205,14 @@ class TempReportDialog(QDialog):
             conn = db_manager.get_db_raw_connection()
             c = conn.cursor()
             
+            # 💡 [핵심 보완] 총전력(KEP_P_kW) 컬럼을 쿼리에 추가
             if is_monthly:
                 target = self.combo_month.currentText()
                 query = """
                     SELECT DATE_FORMAT(log_date, '%%Y-%%m-%%d'), 
                            MIN(`외기온도`), MAX(`외기온도`), 
                            MIN(`실내온도`), MAX(`실내온도`),
+                           MIN(`KEP_P_kW`), MAX(`KEP_P_kW`),
                            MIN(`Tr1_P_kW`), MAX(`Tr1_P_kW`), MIN(`Tr1_Temp`), MAX(`Tr1_Temp`), 
                            MIN(`Tr2_P_kW`), MAX(`Tr2_P_kW`), MIN(`Tr2_Temp`), MAX(`Tr2_Temp`), 
                            MIN(`Tr3_P_kW`), MAX(`Tr3_P_kW`), MIN(`Tr3_Temp`), MAX(`Tr3_Temp`)
@@ -237,6 +228,7 @@ class TempReportDialog(QDialog):
                     SELECT DATE_FORMAT(log_date, '%%Y-%%m'), 
                            MIN(`외기온도`), MAX(`외기온도`), 
                            MIN(`실내온도`), MAX(`실내온도`),
+                           MIN(`KEP_P_kW`), MAX(`KEP_P_kW`),
                            MIN(`Tr1_P_kW`), MAX(`Tr1_P_kW`), MIN(`Tr1_Temp`), MAX(`Tr1_Temp`), 
                            MIN(`Tr2_P_kW`), MAX(`Tr2_P_kW`), MIN(`Tr2_Temp`), MAX(`Tr2_Temp`), 
                            MIN(`Tr3_P_kW`), MAX(`Tr3_P_kW`), MIN(`Tr3_Temp`), MAX(`Tr3_Temp`)
@@ -248,26 +240,30 @@ class TempReportDialog(QDialog):
                 c.execute(query, (f"{target}%",))
                 
             rows = c.fetchall()
-            self.current_rows = rows # 💡 조회된 데이터를 클래스 변수에 임시 저장
+            self.current_rows = rows 
             
-            # 테이블 데이터 채우기
             self.table.setRowCount(len(rows))
             for r_idx, row in enumerate(rows):
                 for c_idx, val in enumerate(row):
                     item = QTableWidgetItem(f"{val:.1f}" if isinstance(val, float) else str(val))
                     item.setTextAlignment(Qt.AlignCenter)
                     
+                    # 💡 [핵심 보완] 새로운 조건부 서식 (적색 경고 로직)
                     if isinstance(val, float):
-                        if c_idx == 4 and val >= 35.0: 
-                            item.setForeground(Qt.red)
-                            item.setFont(QtGui.QFont("Arial", 10, QtGui.QFont.Bold))
-                        elif c_idx in [8, 12, 16] and val >= 90.0: 
-                            item.setForeground(Qt.red)
-                            item.setFont(QtGui.QFont("Arial", 10, QtGui.QFont.Bold))
+                        # c_idx는 '구분(날짜)'가 0이므로 인덱스가 1씩 밀림
+                        if c_idx == 4 and val >= 35.0: # 실내 최고
+                            self.set_warning_format(item)
+                        elif c_idx == 6 and val >= 1750.0: # 총전력 최고
+                            self.set_warning_format(item)
+                        elif c_idx == 8 and val >= 500.0: # TR1 부하 최고
+                            self.set_warning_format(item)
+                        elif c_idx in [12, 16] and val >= 625.0: # TR2, TR3 부하 최고
+                            self.set_warning_format(item)
+                        elif c_idx in [10, 14, 18] and val >= 60.0: # TR1, 2, 3 온도 최고 (60도로 수정)
+                            self.set_warning_format(item)
                             
                     self.table.setItem(r_idx, c_idx, item)
             
-            # 테이블이 완성되면 그래프 그리기 호출
             self.update_graph(rows)
             c.close(); conn.close()
             
@@ -275,8 +271,12 @@ class TempReportDialog(QDialog):
             print(f"온도 데이터 로딩 에러: {e}")
             QMessageBox.warning(self, "데이터 조회 오류", f"데이터베이스 조회 중 문제가 발생했습니다.\n에러: {e}")
 
+    def set_warning_format(self, item):
+        """적색 경고 서식을 일괄 적용하기 위한 헬퍼 함수"""
+        item.setForeground(Qt.red)
+        item.setFont(QtGui.QFont("Arial", 10, QtGui.QFont.Bold))
+
     def update_graph(self, rows):
-        """저장된 데이터를 pandas DataFrame으로 변환하여 이중축 그래프를 그립니다."""
         if not hasattr(self, 'canvas'): return
         
         self.canvas.figure.clf()
@@ -293,14 +293,11 @@ class TempReportDialog(QDialog):
             self.canvas.draw()
             return
 
-        # 1. 튜플로 된 rows를 pandas DataFrame으로 깔끔하게 변환
         cols = ["날짜"] + self.data_labels
         df = pd.DataFrame(rows, columns=cols)
         
-        # 2. X축 문자열 날짜를 축소하여 표기하기 위한 전처리
         df["날짜"] = df["날짜"].astype(str).apply(lambda x: x[5:] if len(x) == 10 else x)
         
-        # 3. 그릴 컬럼 분류
         target_cols = [item.text() for item in selected_items]
         right_cols = [item.text() for item in self.right_axis_selector.selectedItems()]
         right_cols = [col for col in right_cols if col in target_cols] 
@@ -310,39 +307,36 @@ class TempReportDialog(QDialog):
         color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
         color_idx = 0
 
-        # [기본 축 - 왼쪽 렌더링]
+        # [기본 축 - 왼쪽]
         for col in left_cols:
             if col in df.columns:
                 current_color = color_cycle[color_idx % len(color_cycle)]
-                # 온도는 실선(solid)과 원형 마커(o)
                 line = self.ax.plot(df["날짜"], df[col], marker='o', markersize=4, 
                                     color=current_color, label=col)
                 all_lines += line
                 color_idx += 1
         
         if left_cols:
-            self.ax.set_ylabel("기본 온도/부하", color='#2c3e50', fontweight='bold', fontsize=11)
+            self.ax.set_ylabel("기본 축 (온도/부하)", color='#2c3e50', fontweight='bold', fontsize=11)
             self.ax.tick_params(axis='y', labelcolor='#2c3e50')
         else:
             self.ax.yaxis.set_visible(False)
 
-        # [보조 축(이중축) - 오른쪽 렌더링]
+        # [보조 축 - 오른쪽]
         if right_cols:
             ax2 = self.ax.twinx()
             for col in right_cols:
                 if col in df.columns:
                     current_color = color_cycle[color_idx % len(color_cycle)]
-                    # 이중축은 점선(--)과 세모 마커(^)로 구분
                     line = ax2.plot(df["날짜"], df[col], marker='^', markersize=5, linestyle='--', 
                                     color=current_color, label=f"{col} (우측축)")
                     all_lines += line
                     color_idx += 1 
             
-            ax2.set_ylabel("비교용 보조축 데이터", color='#c0392b', fontweight='bold', fontsize=11)
+            ax2.set_ylabel("비교용 보조 축 (부하/온도)", color='#c0392b', fontweight='bold', fontsize=11)
             ax2.tick_params(axis='y', labelcolor='#c0392b')
             ax2.grid(False)
 
-        # 범례 표시 로직
         if all_lines:
             labels = [l.get_label() for l in all_lines]
             if 'ax2' in locals():
@@ -350,21 +344,24 @@ class TempReportDialog(QDialog):
             else:
                 leg = self.ax.legend(all_lines, labels, loc='upper left', bbox_to_anchor=(1.05, 1))
             
-            # 그래프 영역 밖에 범례가 그려지도록 레이아웃 자동 조절
             self.canvas.figure.tight_layout()
             
-        # X축 날짜 겹침 방지 (최대 10~15개 내외로 자동 조절)
-        self.ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=12))
+        # 💡 [핵심 보완] X축 눈금(Tick) 표시 최적화
+        if len(df) <= 12:
+            # 연간 데이터(12개 이하)일 때는 무조건 매월(1칸 간격) 다 표시하도록 강제 설정
+            self.ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+        else:
+            # 일간 데이터(31개 내외)일 때는 겹치지 않도록 12~15개 내외로 적절히 건너뛰며 표시
+            self.ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=15, integer=True))
+            
         self.ax.grid(True, linestyle=':', alpha=0.6)
-        
-        # 글씨가 겹치지 않게 X축 텍스트를 약간 기울임
         self.canvas.figure.autofmt_xdate(rotation=45) 
         
         self.canvas.draw()
 
 
     # =====================================================================
-    # 엑셀 출력 기능 (유지)
+    # 엑셀 출력 기능
     # =====================================================================
     def export_to_excel(self):
         if openpyxl is None:
@@ -458,8 +455,16 @@ class TempReportDialog(QDialog):
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                     cell.border = thin_border
                     
+                    # 엑셀에서도 UI와 동일한 조건으로 적색 경고 적용
                     if isinstance(val, float):
-                        if (c == 4 and val >= 35.0) or (c in [8, 12, 16] and val >= 90.0):
+                        is_warning = False
+                        if c == 4 and val >= 35.0: is_warning = True
+                        elif c == 6 and val >= 1750.0: is_warning = True
+                        elif c == 8 and val >= 500.0: is_warning = True
+                        elif c in [12, 16] and val >= 625.0: is_warning = True
+                        elif c in [10, 14, 18] and val >= 60.0: is_warning = True
+                        
+                        if is_warning:
                             cell.font = Font(color="FF0000", bold=True)
 
             wb.save(save_path)
