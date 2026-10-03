@@ -4,14 +4,19 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
                              QWidget, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QComboBox, QMessageBox, QRadioButton, QFileDialog,
                              QListWidget, QAbstractItemView)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QRect
 from PyQt5 import QtGui
+
+# 인쇄 및 PDF 저장을 위한 모듈 임포트
+from PyQt5.QtPrintSupport import QPrinter, QPrintPreviewDialog
+from PyQt5.QtGui import QPainter, QPageLayout, QFontMetrics, QFont
+
 import db_manager
 
 # 엑셀 출력을 위한 openpyxl
 try:
     import openpyxl
-    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+    from openpyxl.styles import Font as ExcelFont, Alignment, Border, Side, PatternFill
 except ImportError:
     openpyxl = None
 
@@ -31,7 +36,7 @@ class TempReportDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("🌡 온도 및 부하 최고/최저 상관관계 분석 보고서")
-        self.resize(1450, 850) # 열이 늘어나서 창 크기를 약간 더 넓혔습니다.
+        self.resize(1450, 850)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         
         self.current_rows = []
@@ -58,17 +63,32 @@ class TempReportDialog(QDialog):
 
         main_layout.addWidget(self.tabs)
 
+        # =====================================================================
+        # 💡 [핵심 보완] 하단 버튼 영역 분리 및 재배치 (프린터, PDF, 엑셀)
+        # =====================================================================
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
+        
+        self.btn_print = QPushButton("🖨️ 프린터 출력")
+        self.btn_print.setStyleSheet("background-color: #34495e; color: white; font-weight: bold; padding: 8px 15px;")
+        self.btn_print.clicked.connect(self.show_print_preview)
+        
+        self.btn_pdf = QPushButton("📄 PDF 저장")
+        self.btn_pdf.setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold; padding: 8px 15px;")
+        self.btn_pdf.clicked.connect(self.save_to_pdf)
         
         self.btn_export = QPushButton("📊 이 통계를 엑셀로 내보내기")
         self.btn_export.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 8px 15px;")
         self.btn_export.clicked.connect(self.export_to_excel)
-        btn_layout.addWidget(self.btn_export)
         
         btn_close = QPushButton("닫기")
         btn_close.setStyleSheet("background-color: #7f8c8d; color: white; font-weight: bold; padding: 8px 30px;")
         btn_close.clicked.connect(self.accept)
+        
+        # 왼편부터 프린터 -> PDF -> 엑셀 -> 닫기 순으로 부착
+        btn_layout.addWidget(self.btn_print)
+        btn_layout.addWidget(self.btn_pdf)
+        btn_layout.addWidget(self.btn_export)
         btn_layout.addWidget(btn_close)
         
         main_layout.addLayout(btn_layout)
@@ -109,7 +129,6 @@ class TempReportDialog(QDialog):
         layout.addLayout(ctrl_layout)
 
         self.table = QTableWidget()
-        # 💡 [핵심 보완] 총전력(KEP_P_kW) 항목 추가 (총 18열 데이터)
         self.data_labels = [
             "외기 최저(℃)", "외기 최고(℃)", 
             "실내 최저(℃)", "실내 최고(℃)", 
@@ -124,7 +143,6 @@ class TempReportDialog(QDialog):
         self.table.setHorizontalHeaderLabels(headers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         
-        # 안내 문구 디테일 업데이트
         warning_lbl = QLabel("※ 주의: 실내 35℃, TR온도 60℃ / 부하(총전력 1750kW, TR1 500kW, TR2·3 625kW) 이상 도달 시 적색 경고 표시")
         warning_lbl.setStyleSheet("color: #c0392b; font-weight: bold;")
         layout.addWidget(warning_lbl)
@@ -157,6 +175,7 @@ class TempReportDialog(QDialog):
         graph_ctrl.addWidget(QLabel("<b>[2] 오른쪽 보조축(이중축)으로<br>보낼 항목 선택:</b>")) 
         graph_ctrl.addWidget(self.right_axis_selector)
         
+        graph_ctrl.addStretch()
         layout.addLayout(graph_ctrl)
 
         self.canvas = FigureCanvas(Figure(figsize=(10, 5)))
@@ -166,12 +185,11 @@ class TempReportDialog(QDialog):
         self.data_selector.itemSelectionChanged.connect(self.sync_right_axis_list)
         self.right_axis_selector.itemSelectionChanged.connect(self.trigger_graph_update)
 
-        # 초기 기본 선택 세팅 (총전력, 실내최고, TR1온도)
         self.data_selector.blockSignals(True)
-        self.data_selector.item(1).setSelected(True) # 외기 최고
-        self.data_selector.item(3).setSelected(True) # 실내 최고
-        self.data_selector.item(5).setSelected(True) # 총전력 최고
-        self.data_selector.item(9).setSelected(True) # TR1 온도 최고
+        self.data_selector.item(1).setSelected(True) 
+        self.data_selector.item(3).setSelected(True) 
+        self.data_selector.item(5).setSelected(True) 
+        self.data_selector.item(9).setSelected(True) 
         self.data_selector.blockSignals(False)
         self.sync_right_axis_list()
 
@@ -205,7 +223,6 @@ class TempReportDialog(QDialog):
             conn = db_manager.get_db_raw_connection()
             c = conn.cursor()
             
-            # 💡 [핵심 보완] 총전력(KEP_P_kW) 컬럼을 쿼리에 추가
             if is_monthly:
                 target = self.combo_month.currentText()
                 query = """
@@ -248,19 +265,12 @@ class TempReportDialog(QDialog):
                     item = QTableWidgetItem(f"{val:.1f}" if isinstance(val, float) else str(val))
                     item.setTextAlignment(Qt.AlignCenter)
                     
-                    # 💡 [핵심 보완] 새로운 조건부 서식 (적색 경고 로직)
                     if isinstance(val, float):
-                        # c_idx는 '구분(날짜)'가 0이므로 인덱스가 1씩 밀림
-                        if c_idx == 4 and val >= 35.0: # 실내 최고
-                            self.set_warning_format(item)
-                        elif c_idx == 6 and val >= 1750.0: # 총전력 최고
-                            self.set_warning_format(item)
-                        elif c_idx == 8 and val >= 500.0: # TR1 부하 최고
-                            self.set_warning_format(item)
-                        elif c_idx in [12, 16] and val >= 625.0: # TR2, TR3 부하 최고
-                            self.set_warning_format(item)
-                        elif c_idx in [10, 14, 18] and val >= 60.0: # TR1, 2, 3 온도 최고 (60도로 수정)
-                            self.set_warning_format(item)
+                        if c_idx == 4 and val >= 35.0: self.set_warning_format(item)
+                        elif c_idx == 6 and val >= 1750.0: self.set_warning_format(item)
+                        elif c_idx == 8 and val >= 500.0: self.set_warning_format(item)
+                        elif c_idx in [12, 16] and val >= 625.0: self.set_warning_format(item)
+                        elif c_idx in [10, 14, 18] and val >= 60.0: self.set_warning_format(item)
                             
                     self.table.setItem(r_idx, c_idx, item)
             
@@ -272,7 +282,6 @@ class TempReportDialog(QDialog):
             QMessageBox.warning(self, "데이터 조회 오류", f"데이터베이스 조회 중 문제가 발생했습니다.\n에러: {e}")
 
     def set_warning_format(self, item):
-        """적색 경고 서식을 일괄 적용하기 위한 헬퍼 함수"""
         item.setForeground(Qt.red)
         item.setFont(QtGui.QFont("Arial", 10, QtGui.QFont.Bold))
 
@@ -295,8 +304,7 @@ class TempReportDialog(QDialog):
 
         cols = ["날짜"] + self.data_labels
         df = pd.DataFrame(rows, columns=cols)
-        
-        df["날짜"] = df["날짜"].astype(str).apply(lambda x: x[5:] if len(x) == 10 else x)
+        df["날짜"] = df["날짜"].astype(str)
         
         target_cols = [item.text() for item in selected_items]
         right_cols = [item.text() for item in self.right_axis_selector.selectedItems()]
@@ -307,7 +315,6 @@ class TempReportDialog(QDialog):
         color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
         color_idx = 0
 
-        # [기본 축 - 왼쪽]
         for col in left_cols:
             if col in df.columns:
                 current_color = color_cycle[color_idx % len(color_cycle)]
@@ -322,7 +329,6 @@ class TempReportDialog(QDialog):
         else:
             self.ax.yaxis.set_visible(False)
 
-        # [보조 축 - 오른쪽]
         if right_cols:
             ax2 = self.ax.twinx()
             for col in right_cols:
@@ -339,19 +345,17 @@ class TempReportDialog(QDialog):
 
         if all_lines:
             labels = [l.get_label() for l in all_lines]
+            ncols = len(labels) if len(labels) <= 6 else 6
             if 'ax2' in locals():
-                leg = ax2.legend(all_lines, labels, loc='upper left', bbox_to_anchor=(1.05, 1))
+                leg = ax2.legend(all_lines, labels, loc='upper center', ncol=ncols)
             else:
-                leg = self.ax.legend(all_lines, labels, loc='upper left', bbox_to_anchor=(1.05, 1))
+                leg = self.ax.legend(all_lines, labels, loc='upper center', ncol=ncols)
             
             self.canvas.figure.tight_layout()
             
-        # 💡 [핵심 보완] X축 눈금(Tick) 표시 최적화
         if len(df) <= 12:
-            # 연간 데이터(12개 이하)일 때는 무조건 매월(1칸 간격) 다 표시하도록 강제 설정
             self.ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
         else:
-            # 일간 데이터(31개 내외)일 때는 겹치지 않도록 12~15개 내외로 적절히 건너뛰며 표시
             self.ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=15, integer=True))
             
         self.ax.grid(True, linestyle=':', alpha=0.6)
@@ -359,6 +363,119 @@ class TempReportDialog(QDialog):
         
         self.canvas.draw()
 
+    # =====================================================================
+    # 🌟 [개선됨] 프린터 출력 (종이 인쇄) 로직
+    # =====================================================================
+    def show_print_preview(self):
+        if self.tabs.currentIndex() != 1:
+            QMessageBox.information(self, "안내", "먼저 '온도 추이 시각화 그래프' 탭으로 이동하신 후 프린터 출력을 진행해 주세요.")
+            return
+            
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setPageOrientation(QPageLayout.Landscape) 
+        
+        preview_dialog = QPrintPreviewDialog(printer, self)
+        preview_dialog.paintRequested.connect(self.render_print_page)
+        preview_dialog.resize(1100, 800)
+        preview_dialog.exec_()
+
+    # =====================================================================
+    # 🌟 [신규 추가] PDF 자동 저장 로직
+    # =====================================================================
+    def save_to_pdf(self):
+        if self.tabs.currentIndex() != 1:
+            QMessageBox.information(self, "안내", "먼저 '온도 추이 시각화 그래프' 탭으로 이동하신 후 PDF 저장을 진행해 주세요.")
+            return
+
+        # 자동 파일명 생성을 위한 조회 기준 포맷팅
+        if self.radio_month.isChecked():
+            target = self.combo_month.currentText()
+        else:
+            target = self.combo_year.currentText()
+            
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+        default_filename = f"{target}_운전온도_그래프_{timestamp}.pdf"
+        
+        # 파일 저장 위치 선택 창 오픈
+        save_path, _ = QFileDialog.getSaveFileName(self, "PDF 파일 저장 위치 선택", default_filename, "PDF 문서 (*.pdf)")
+        
+        if not save_path: return
+        
+        try:
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setPageOrientation(QPageLayout.Landscape)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(save_path) # 사용자가 지정한 경로로 PDF 추출
+            
+            self.render_print_page(printer)
+            QMessageBox.information(self, "저장 완료", f"PDF 파일이 성공적으로 생성되었습니다.\n\n경로: {save_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "저장 실패", f"PDF 파일 생성 중 오류가 발생했습니다.\n\n에러: {e}")
+
+    # =====================================================================
+    # 🌟 [핵심 보완] 프린터 해상도 충돌 방지 및 레이아웃 자동 계산 렌더링
+    # =====================================================================
+    def render_print_page(self, printer):
+        try:
+            painter = QPainter(printer)
+            
+            # 페이지 전체 크기 (DPI와 무관하게 종이 비율에 기반하여 계산)
+            rect = printer.pageRect()
+            
+            # 동적 제목 문자열 생성 (2026년 09월 or 2026년)
+            if self.radio_month.isChecked():
+                target = self.combo_month.currentText()
+                y, m = target.split('-')
+                target_str = f"{y}년 {m}월"
+            else:
+                target = self.combo_year.currentText()
+                target_str = f"{target}년"
+                
+            title_text = f"래미안개포루체하임아파트 {target_str} 전기실 운전온도 현황 그래프"
+            print_time = datetime.datetime.now().strftime("출력일자: %Y-%m-%d %H:%M")
+            
+            # 1. 상부 마진 (25mm 설정 -> A4 높이 기준 대략 12% 위치)
+            top_margin = int(rect.height() * 0.12)
+            
+            # 2. 메인 제목 렌더링 (16pt 굵게, 중앙 정렬)
+            title_font = QFont("Malgun Gothic", 16, QFont.Bold)
+            painter.setFont(title_font)
+            title_rect = QRect(rect.left(), rect.top() + top_margin, rect.width(), int(rect.height() * 0.08))
+            painter.drawText(title_rect, Qt.AlignCenter | Qt.AlignTop, title_text)
+            
+            # 3. 출력일자 렌더링 (12pt, 우측 정렬)
+            date_font = QFont("Malgun Gothic", 12)
+            painter.setFont(date_font)
+            # 제목 아래로 살짝 내리고, 우측 끝에서 5% 여백 띄움
+            date_rect = QRect(rect.left(), rect.top() + top_margin + int(rect.height() * 0.08), 
+                              rect.width() - int(rect.width() * 0.05), int(rect.height() * 0.05))
+            painter.drawText(date_rect, Qt.AlignRight | Qt.AlignTop, print_time)
+            
+            # 4. 그래프 이미지 캡처 및 간격 띄움
+            pixmap = self.canvas.grab()
+            
+            # 출력 일자 밑으로 한 줄 정도 간격을 띄움 (페이지 높이의 15% 정도 아래부터 시작)
+            graph_top = rect.top() + top_margin + int(rect.height() * 0.16)
+            
+            # 그래프가 들어갈 안전한 하단 박스 영역 계산 (좌우 5%, 하단 5% 여백)
+            graph_rect = QRect(rect.left() + int(rect.width() * 0.05), 
+                               graph_top, 
+                               int(rect.width() * 0.9), 
+                               rect.height() - graph_top - int(rect.height() * 0.05))
+                               
+            # 원본 비율을 깨지 않으면서 지정된 박스 안에 꽉 차게 리사이징
+            scaled_pixmap = pixmap.scaled(graph_rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            
+            # 중앙 정렬을 위한 x, y 좌표 미세조정
+            x = graph_rect.x() + (graph_rect.width() - scaled_pixmap.width()) // 2
+            y = graph_rect.y() + (graph_rect.height() - scaled_pixmap.height()) // 2
+            
+            # 최종 렌더링
+            painter.drawPixmap(x, y, scaled_pixmap)
+            painter.end()
+            
+        except Exception as e:
+            QMessageBox.warning(self, "인쇄 오류", f"렌더링 중 오류가 발생했습니다.\n에러: {e}")
 
     # =====================================================================
     # 엑셀 출력 기능
@@ -404,27 +521,27 @@ class TempReportDialog(QDialog):
             ws.merge_cells(title_range)
             cell_title = ws['A1']
             cell_title.value = "래미안개포루체하임아파트 전기설비 운전 온도(최고/최저) 데이터 통계"
-            cell_title.font = Font(size=18, bold=True)
+            cell_title.font = ExcelFont(size=18, bold=True)
             cell_title.alignment = Alignment(horizontal="center", vertical="center")
             ws.row_dimensions[1].height = 35
 
             ws.merge_cells(f'A2:F2')
             ws['A2'].value = f"■ 조회 기준: {search_target}"
-            ws['A2'].font = Font(bold=True)
+            ws['A2'].font = ExcelFont(bold=True)
             ws['A2'].alignment = Alignment(horizontal="left", vertical="center")
             
             date_range = f'G2:{last_col_letter}2'
             ws.merge_cells(date_range)
             print_time = datetime.datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
             ws['G2'].value = f"■ 출력 일시: {print_time}"
-            ws['G2'].font = Font(bold=True)
+            ws['G2'].font = ExcelFont(bold=True)
             ws['G2'].alignment = Alignment(horizontal="right", vertical="center")
             ws.row_dimensions[2].height = 20
 
             ws.row_dimensions[3].height = 10
 
             header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-            header_font = Font(bold=True)
+            header_font = ExcelFont(bold=True)
             thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), 
                                  top=Side(style='thin'), bottom=Side(style='thin'))
 
@@ -455,7 +572,6 @@ class TempReportDialog(QDialog):
                     cell.alignment = Alignment(horizontal="center", vertical="center")
                     cell.border = thin_border
                     
-                    # 엑셀에서도 UI와 동일한 조건으로 적색 경고 적용
                     if isinstance(val, float):
                         is_warning = False
                         if c == 4 and val >= 35.0: is_warning = True
@@ -465,7 +581,7 @@ class TempReportDialog(QDialog):
                         elif c in [10, 14, 18] and val >= 60.0: is_warning = True
                         
                         if is_warning:
-                            cell.font = Font(color="FF0000", bold=True)
+                            cell.font = ExcelFont(color="FF0000", bold=True)
 
             wb.save(save_path)
             QMessageBox.information(self, "출력 완료", f"A4 인쇄용 온도(최고/최저) 통계 엑셀 파일이 저장되었습니다.\n\n저장 위치:\n{save_path}")
