@@ -65,7 +65,6 @@ class TempReportDialog(QDialog):
         
         main_layout.addLayout(btn_layout)
         
-        # 💡 UI 구성이 모두 끝난 후 마지막에 데이터 로딩 (에러 방지)
         self.load_data()
 
     def init_table_tab(self):
@@ -140,7 +139,7 @@ class TempReportDialog(QDialog):
         
         self.plot_widget = pg.PlotWidget(title="기간별 최고/최저 온도 추이 (외기/실내/변압기)")
         
-        # 💡 [수정] 범례가 그래프 선을 가리지 않도록 위치(오프셋) 조정
+        # 범례 위치 조정
         self.plot_widget.addLegend(offset=(-20, 20))
         
         self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
@@ -219,25 +218,44 @@ class TempReportDialog(QDialog):
         if not rows: return
         
         x_data = list(range(len(rows)))
+        last_idx = len(rows) - 1
         
-        # 💡 [핵심 추가] X축에 실제 날짜(MM-DD)를 표기하기 위한 라벨 매핑 적용
-        x_labels = []
-        for i, r in enumerate(rows):
-            date_str = str(r[0])
+        # 💡 [해결 1] 데이터 개수에 맞춰 눈금 축소 및 마지막 날짜 강제 포함 (축 선 연장용)
+        step = max(1, len(rows) // 6) 
+        x_labels_major = []
+        
+        for i in range(0, len(rows), step):
+            date_str = str(rows[i][0])
             display_str = date_str[5:] if len(date_str) == 10 else date_str
-            x_labels.append((i, display_str))
+            x_labels_major.append((i, display_str))
+            
+        # 마지막 데이터의 눈금이 없다면 끝에 강제로 추가해서 축이 끝까지 그려지게 함
+        if x_labels_major[-1][0] != last_idx:
+            date_str = str(rows[last_idx][0])
+            display_str = date_str[5:] if len(date_str) == 10 else date_str
+            x_labels_major.append((last_idx, display_str))
             
         ax = self.plot_widget.getAxis('bottom')
-        ax.setTicks([x_labels])
+        ax.setTicks([x_labels_major, []])
         
+        # 💡 [해결 2] X축의 시작과 끝을 데이터 길이에 딱 맞춰서 공중에 붕 뜨지 않게(교차하게) 함
+        self.plot_widget.setXRange(0, last_idx, padding=0.01)
+
         # 최고/최저 리스트 분리
         out_min = [r[1] if r[1] is not None else 0 for r in rows]
         out_max = [r[2] if r[2] is not None else 0 for r in rows]
         in_min  = [r[3] if r[3] is not None else 0 for r in rows]
         in_max  = [r[4] if r[4] is not None else 0 for r in rows]
+        
+        # 💡 [해결 3] 누락되었던 TR2, TR3 인덱스 변수 할당
         tr1_min = [r[7] if r[7] is not None else 0 for r in rows]
         tr1_max = [r[8] if r[8] is not None else 0 for r in rows]
+        tr2_min = [r[11] if r[11] is not None else 0 for r in rows]
+        tr2_max = [r[12] if r[12] is not None else 0 for r in rows]
+        tr3_min = [r[15] if r[15] is not None else 0 for r in rows]
+        tr3_max = [r[16] if r[16] is not None else 0 for r in rows]
         
+        # 플로팅 (외기, 실내, TR1, TR2, TR3 모두 표시)
         self.plot_widget.plot(x_data, out_max, pen=pg.mkPen(color='g', width=2), name="외기 최고")
         self.plot_widget.plot(x_data, out_min, pen=pg.mkPen(color='g', width=1, style=Qt.DashLine), name="외기 최저")
         
@@ -246,6 +264,12 @@ class TempReportDialog(QDialog):
         
         self.plot_widget.plot(x_data, tr1_max, pen=pg.mkPen(color='r', width=2), name="TR1 온도 최고")
         self.plot_widget.plot(x_data, tr1_min, pen=pg.mkPen(color='r', width=1, style=Qt.DashLine), name="TR1 온도 최저")
+        
+        self.plot_widget.plot(x_data, tr2_max, pen=pg.mkPen(color='m', width=2), name="TR2 온도 최고")
+        self.plot_widget.plot(x_data, tr2_min, pen=pg.mkPen(color='m', width=1, style=Qt.DashLine), name="TR2 온도 최저")
+        
+        self.plot_widget.plot(x_data, tr3_max, pen=pg.mkPen(color='c', width=2), name="TR3 온도 최고")
+        self.plot_widget.plot(x_data, tr3_min, pen=pg.mkPen(color='c', width=1, style=Qt.DashLine), name="TR3 온도 최저")
 
     def export_to_excel(self):
         if openpyxl is None:
