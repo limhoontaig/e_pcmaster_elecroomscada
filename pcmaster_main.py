@@ -52,6 +52,10 @@ if __name__ == "__main__":
 
     # ⭐ [신규] 프로그램 중복 실행 방지
     shared_memory = QSharedMemory("LS_PLC_SCADA_Shared_Memory")
+
+    if shared_memory.attach():
+        shared_memory.detach()
+
     if not shared_memory.create(1):
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Warning)

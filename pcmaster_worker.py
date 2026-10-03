@@ -1,6 +1,7 @@
 # pcmaster_worker.py
 import time
 import os
+import platform
 import struct
 import configparser
 
@@ -55,10 +56,24 @@ config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
 
 def get_com_ports():
     config = configparser.ConfigParser()
+    
+    # 1. 윈도우 기본값 설정
+    port_relay = 'COM3'
+    port_plc = 'COM4'
+
+    # 2. 파일이 있으면 읽고, 에러가 나지 않도록 안전하게(fallback) 값을 가져옵니다.
     if os.path.exists(config_path):
         config.read(config_path, encoding='utf-8')
-        return config['SETTINGS'].get('COM_PORT_RELAY', 'COM3'), config['SETTINGS'].get('COM_PORT_PLC', 'COM4')
-    return 'COM3', 'COM4'
+        if config.has_section('SETTINGS'):
+            port_relay = config.get('SETTINGS', 'COM_PORT_RELAY', fallback=port_relay)
+            port_plc = config.get('SETTINGS', 'COM_PORT_PLC', fallback=port_plc)
+
+    # 3. 맥(macOS) 환경이면 가상 포트로 강제 고정
+    if platform.system() == 'Darwin':
+        port_relay = '/tmp/vcom1'
+        port_plc = '/tmp/vcom1'
+        
+    return port_relay, port_plc
 
 COM_PORT_RELAY, COM_PORT_PLC = get_com_ports()
 BAUD_RATE = 19200         
