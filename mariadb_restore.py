@@ -1,4 +1,5 @@
 import os
+import platform
 import subprocess
 import pymysql
 # 💡 파일 선택기를 위한 tkinter 라이브러리 추가
@@ -44,8 +45,15 @@ def restore_mariadb(sql_filepath):
         print(f"❌ 복원할 SQL 파일을 찾을 수 없습니다: {sql_filepath}")
         return False
 
-    mysql_path = r"C:\MariaDB2\bin\mysql.exe" 
-    
+    # mysql_path = r"C:\MariaDB2\bin\mysql.exe" 
+    # 1. OS(운영체제)를 스스로 감지하여 알맞은 명령어 경로 지정
+    if platform.system() == 'Darwin':  
+        # 맥(macOS) 애플 실리콘 Homebrew 기본 설치 경로
+        mysql_path = "/opt/homebrew/bin/mysql" 
+    else:  
+        # 현장 윈도우(Windows) 환경
+        mysql_path = r"C:\MariaDB2\bin\mysql.exe"
+
     print("-" * 50)
     print(f"🔄 복원 대상 파일: {os.path.basename(sql_filepath)}")
     print("-" * 50)
