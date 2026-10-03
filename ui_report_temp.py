@@ -2,7 +2,8 @@
 import datetime
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, 
                              QWidget, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-                             QHeaderView, QComboBox, QMessageBox, QRadioButton, QFileDialog)
+                             QHeaderView, QComboBox, QMessageBox, QRadioButton, QFileDialog,
+                             QListWidget, QAbstractItemView)
 from PyQt5.QtCore import Qt
 from PyQt5 import QtGui
 import db_manager
@@ -14,11 +15,16 @@ try:
 except ImportError:
     openpyxl = None
 
-# 그래프 시각화를 위한 pyqtgraph
-try:
-    import pyqtgraph as pg
-except ImportError:
-    pg = None
+# 🌟 [신규 추가] matplotlib 및 pandas 임포트 (기존 pyqtgraph 대체)
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.ticker as ticker
+
+# 한글 폰트 및 마이너스 부호 깨짐 방지
+plt.rcParams['font.family'] = 'Malgun Gothic'
+plt.rcParams['axes.unicode_minus'] = False
 
 
 class TempReportDialog(QDialog):
@@ -27,6 +33,10 @@ class TempReportDialog(QDialog):
         self.setWindowTitle("🌡 온도 및 부하 최고/최저 상관관계 분석 보고서")
         self.resize(1400, 850)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
+        
+        # 데이터를 임시 저장할 변수 (리스트 박스 클릭 시 매번 DB를 조회하지 않도록 함)
+        self.current_rows = []
+        
         self.init_ui()
 
     def init_ui(self):
@@ -46,7 +56,7 @@ class TempReportDialog(QDialog):
         
         self.tab_graph = QWidget()
         self.init_graph_tab()
-        self.tabs.addTab(self.tab_graph, "📈 온도 추이 시각화 그래프")
+        self.tabs.addTab(self.tab_graph, "📈 온도 추이 맞춤형 시각화")
 
         main_layout.addWidget(self.tabs)
 
@@ -65,6 +75,7 @@ class TempReportDialog(QDialog):
         
         main_layout.addLayout(btn_layout)
         
+        # 마지막에 데이터 로딩
         self.load_data()
 
     def init_table_tab(self):
@@ -101,17 +112,18 @@ class TempReportDialog(QDialog):
         layout.addLayout(ctrl_layout)
 
         self.table = QTableWidget()
-        headers = [
-            "구분(날짜/월)", 
+        # 그래프에서 사용할 데이터 항목 이름들을 멤버 변수로 정의합니다.
+        self.data_labels = [
             "외기 최저(℃)", "외기 최고(℃)", 
             "실내 최저(℃)", "실내 최고(℃)", 
             "TR1부하 최저", "TR1부하 최고", "TR1온도 최저", "TR1온도 최고", 
             "TR2부하 최저", "TR2부하 최고", "TR2온도 최저", "TR2온도 최고", 
             "TR3부하 최저", "TR3부하 최고", "TR3온도 최저", "TR3온도 최고"
         ]
+        
+        headers = ["구분(날짜/월)"] + self.data_labels
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
-        
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         
         warning_lbl = QLabel("※ 주의: 실내 최고온도 35℃ 이상, 변압기 최고온도 90℃ 이상 도달 시 적색으로 경고 표시됩니다.")
@@ -127,26 +139,76 @@ class TempReportDialog(QDialog):
             self.combo_month.setVisible(False)
             self.combo_year.setVisible(True)
 
+    # =====================================================================
+    # 🌟 [핵심 개편] matplotlib 기반의 리스트 박스 다중 선택 이중축 그래프
+    # =====================================================================
     def init_graph_tab(self):
         layout = QVBoxLayout(self.tab_graph)
         
-        if pg is None:
-            layout.addWidget(QLabel("pyqtgraph 라이브러리가 설치되지 않아 그래프를 표시할 수 없습니다.\n'pip install pyqtgraph'를 실행해 주세요."))
-            return
+        # 1. 상단 컨트롤 영역 (리스트 박스)
+        graph_ctrl = QHBoxLayout()
+        
+        # [왼쪽 축] 표시할 전체 데이터 선택
+        self.data_selector = QListWidget()
+        self.data_selector.setSelectionMode(QAbstractItemView.MultiSelection) 
+        self.data_selector.addItems(self.data_labels)
+        self.data_selector.setMaximumHeight(100) 
+        
+        # [오른쪽 이중축] 왼쪽에서 선택된 항목 중 오른쪽 축에 그릴 항목 선택
+        self.right_axis_selector = QListWidget()
+        self.right_axis_selector.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.right_axis_selector.setMaximumHeight(100) 
+        
+        graph_ctrl.addWidget(QLabel("<b>[1] 그래프로 그릴 항목 선택:</b><br>(기본 왼쪽 축)"))
+        graph_ctrl.addWidget(self.data_selector)
+        graph_ctrl.addWidget(QLabel("<b>[2] 오른쪽 보조축(이중축)으로<br>보낼 항목 선택:</b>")) 
+        graph_ctrl.addWidget(self.right_axis_selector)
+        
+        layout.addLayout(graph_ctrl)
+
+        # 2. matplotlib 캔버스 생성
+        self.canvas = FigureCanvas(Figure(figsize=(10, 5)))
+        self.ax = self.canvas.figure.add_subplot(111)
+        layout.addWidget(self.canvas)
+
+        # 3. 이벤트 연결
+        self.data_selector.itemSelectionChanged.connect(self.sync_right_axis_list)
+        self.right_axis_selector.itemSelectionChanged.connect(self.trigger_graph_update)
+
+        # 4. 초기 기본 선택 세팅 (사용자가 빈 화면을 보지 않도록 유도)
+        self.data_selector.blockSignals(True)
+        self.data_selector.item(1).setSelected(True) # 외기 최고
+        self.data_selector.item(3).setSelected(True) # 실내 최고
+        self.data_selector.item(7).setSelected(True) # TR1 온도 최고
+        self.data_selector.blockSignals(False)
+        self.sync_right_axis_list() # 오른쪽 축 리스트 업데이트
+
+    def sync_right_axis_list(self):
+        """왼쪽에서 선택된 항목들만 오른쪽 축 선택 박스에 나타나도록 동기화"""
+        self.data_selector.blockSignals(True)
+        self.right_axis_selector.blockSignals(True)
+        try:
+            prev_selected = [item.text() for item in self.right_axis_selector.selectedItems()]
+            left_selected = [item.text() for item in self.data_selector.selectedItems()]
             
-        pg.setConfigOption('background', 'w')
-        pg.setConfigOption('foreground', 'k')
-        
-        self.plot_widget = pg.PlotWidget(title="기간별 최고/최저 온도 추이 (외기/실내/변압기)")
-        
-        # 범례 위치 조정
-        self.plot_widget.addLegend(offset=(-20, 20))
-        
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
-        self.plot_widget.setLabel('left', '온도 (℃)')
-        self.plot_widget.setLabel('bottom', '조회 날짜')
-        
-        layout.addWidget(self.plot_widget)
+            self.right_axis_selector.clear()
+            if left_selected:
+                self.right_axis_selector.addItems(left_selected)
+                # 이전에 이중축으로 선택해둔 항목이 여전히 있다면 선택 유지
+                for i in range(self.right_axis_selector.count()):
+                    item = self.right_axis_selector.item(i)
+                    if item.text() in prev_selected:
+                        item.setSelected(True)
+        finally:
+            self.data_selector.blockSignals(False)
+            self.right_axis_selector.blockSignals(False)
+            
+        self.trigger_graph_update()
+
+    def trigger_graph_update(self):
+        """리스트 박스 클릭 시 DB 조회 없이 기존 데이터(self.current_rows)로 그래프만 다시 그림"""
+        if hasattr(self, 'current_rows') and self.current_rows:
+            self.update_graph(self.current_rows)
 
     def load_data(self):
         is_monthly = self.radio_month.isChecked()
@@ -186,7 +248,9 @@ class TempReportDialog(QDialog):
                 c.execute(query, (f"{target}%",))
                 
             rows = c.fetchall()
+            self.current_rows = rows # 💡 조회된 데이터를 클래스 변수에 임시 저장
             
+            # 테이블 데이터 채우기
             self.table.setRowCount(len(rows))
             for r_idx, row in enumerate(rows):
                 for c_idx, val in enumerate(row):
@@ -203,6 +267,7 @@ class TempReportDialog(QDialog):
                             
                     self.table.setItem(r_idx, c_idx, item)
             
+            # 테이블이 완성되면 그래프 그리기 호출
             self.update_graph(rows)
             c.close(); conn.close()
             
@@ -211,66 +276,96 @@ class TempReportDialog(QDialog):
             QMessageBox.warning(self, "데이터 조회 오류", f"데이터베이스 조회 중 문제가 발생했습니다.\n에러: {e}")
 
     def update_graph(self, rows):
-        if pg is None: return
-        if not hasattr(self, 'plot_widget'): return
+        """저장된 데이터를 pandas DataFrame으로 변환하여 이중축 그래프를 그립니다."""
+        if not hasattr(self, 'canvas'): return
         
-        self.plot_widget.clear()
-        if not rows: return
+        self.canvas.figure.clf()
+        self.ax = self.canvas.figure.add_subplot(111)
         
-        x_data = list(range(len(rows)))
-        last_idx = len(rows) - 1
-        
-        # 💡 [해결 1] 데이터 개수에 맞춰 눈금 축소 및 마지막 날짜 강제 포함 (축 선 연장용)
-        step = max(1, len(rows) // 6) 
-        x_labels_major = []
-        
-        for i in range(0, len(rows), step):
-            date_str = str(rows[i][0])
-            display_str = date_str[5:] if len(date_str) == 10 else date_str
-            x_labels_major.append((i, display_str))
+        if not rows:
+            self.ax.text(0.5, 0.5, "조회된 데이터가 없습니다.", ha='center', va='center')
+            self.canvas.draw()
+            return
             
-        # 마지막 데이터의 눈금이 없다면 끝에 강제로 추가해서 축이 끝까지 그려지게 함
-        if x_labels_major[-1][0] != last_idx:
-            date_str = str(rows[last_idx][0])
-            display_str = date_str[5:] if len(date_str) == 10 else date_str
-            x_labels_major.append((last_idx, display_str))
+        selected_items = self.data_selector.selectedItems()
+        if not selected_items:
+            self.ax.text(0.5, 0.5, "위 리스트에서 그래프로 확인할 항목을 1개 이상 선택해 주세요.", ha='center', va='center')
+            self.canvas.draw()
+            return
+
+        # 1. 튜플로 된 rows를 pandas DataFrame으로 깔끔하게 변환
+        cols = ["날짜"] + self.data_labels
+        df = pd.DataFrame(rows, columns=cols)
+        
+        # 2. X축 문자열 날짜를 축소하여 표기하기 위한 전처리
+        df["날짜"] = df["날짜"].astype(str).apply(lambda x: x[5:] if len(x) == 10 else x)
+        
+        # 3. 그릴 컬럼 분류
+        target_cols = [item.text() for item in selected_items]
+        right_cols = [item.text() for item in self.right_axis_selector.selectedItems()]
+        right_cols = [col for col in right_cols if col in target_cols] 
+        left_cols = [col for col in target_cols if col not in right_cols]
+
+        all_lines = []
+        color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        color_idx = 0
+
+        # [기본 축 - 왼쪽 렌더링]
+        for col in left_cols:
+            if col in df.columns:
+                current_color = color_cycle[color_idx % len(color_cycle)]
+                # 온도는 실선(solid)과 원형 마커(o)
+                line = self.ax.plot(df["날짜"], df[col], marker='o', markersize=4, 
+                                    color=current_color, label=col)
+                all_lines += line
+                color_idx += 1
+        
+        if left_cols:
+            self.ax.set_ylabel("기본 온도/부하", color='#2c3e50', fontweight='bold', fontsize=11)
+            self.ax.tick_params(axis='y', labelcolor='#2c3e50')
+        else:
+            self.ax.yaxis.set_visible(False)
+
+        # [보조 축(이중축) - 오른쪽 렌더링]
+        if right_cols:
+            ax2 = self.ax.twinx()
+            for col in right_cols:
+                if col in df.columns:
+                    current_color = color_cycle[color_idx % len(color_cycle)]
+                    # 이중축은 점선(--)과 세모 마커(^)로 구분
+                    line = ax2.plot(df["날짜"], df[col], marker='^', markersize=5, linestyle='--', 
+                                    color=current_color, label=f"{col} (우측축)")
+                    all_lines += line
+                    color_idx += 1 
             
-        ax = self.plot_widget.getAxis('bottom')
-        ax.setTicks([x_labels_major, []])
-        
-        # 💡 [해결 2] X축의 시작과 끝을 데이터 길이에 딱 맞춰서 공중에 붕 뜨지 않게(교차하게) 함
-        self.plot_widget.setXRange(0, last_idx, padding=0.01)
+            ax2.set_ylabel("비교용 보조축 데이터", color='#c0392b', fontweight='bold', fontsize=11)
+            ax2.tick_params(axis='y', labelcolor='#c0392b')
+            ax2.grid(False)
 
-        # 최고/최저 리스트 분리
-        out_min = [r[1] if r[1] is not None else 0 for r in rows]
-        out_max = [r[2] if r[2] is not None else 0 for r in rows]
-        in_min  = [r[3] if r[3] is not None else 0 for r in rows]
-        in_max  = [r[4] if r[4] is not None else 0 for r in rows]
+        # 범례 표시 로직
+        if all_lines:
+            labels = [l.get_label() for l in all_lines]
+            if 'ax2' in locals():
+                leg = ax2.legend(all_lines, labels, loc='upper left', bbox_to_anchor=(1.05, 1))
+            else:
+                leg = self.ax.legend(all_lines, labels, loc='upper left', bbox_to_anchor=(1.05, 1))
+            
+            # 그래프 영역 밖에 범례가 그려지도록 레이아웃 자동 조절
+            self.canvas.figure.tight_layout()
+            
+        # X축 날짜 겹침 방지 (최대 10~15개 내외로 자동 조절)
+        self.ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=12))
+        self.ax.grid(True, linestyle=':', alpha=0.6)
         
-        # 💡 [해결 3] 누락되었던 TR2, TR3 인덱스 변수 할당
-        tr1_min = [r[7] if r[7] is not None else 0 for r in rows]
-        tr1_max = [r[8] if r[8] is not None else 0 for r in rows]
-        tr2_min = [r[11] if r[11] is not None else 0 for r in rows]
-        tr2_max = [r[12] if r[12] is not None else 0 for r in rows]
-        tr3_min = [r[15] if r[15] is not None else 0 for r in rows]
-        tr3_max = [r[16] if r[16] is not None else 0 for r in rows]
+        # 글씨가 겹치지 않게 X축 텍스트를 약간 기울임
+        self.canvas.figure.autofmt_xdate(rotation=45) 
         
-        # 플로팅 (외기, 실내, TR1, TR2, TR3 모두 표시)
-        self.plot_widget.plot(x_data, out_max, pen=pg.mkPen(color='g', width=2), name="외기 최고")
-        self.plot_widget.plot(x_data, out_min, pen=pg.mkPen(color='g', width=1, style=Qt.DashLine), name="외기 최저")
-        
-        self.plot_widget.plot(x_data, in_max, pen=pg.mkPen(color='b', width=2), name="실내 최고")
-        self.plot_widget.plot(x_data, in_min, pen=pg.mkPen(color='b', width=1, style=Qt.DashLine), name="실내 최저")
-        
-        self.plot_widget.plot(x_data, tr1_max, pen=pg.mkPen(color='r', width=2), name="TR1 온도 최고")
-        self.plot_widget.plot(x_data, tr1_min, pen=pg.mkPen(color='r', width=1, style=Qt.DashLine), name="TR1 온도 최저")
-        
-        self.plot_widget.plot(x_data, tr2_max, pen=pg.mkPen(color='m', width=2), name="TR2 온도 최고")
-        self.plot_widget.plot(x_data, tr2_min, pen=pg.mkPen(color='m', width=1, style=Qt.DashLine), name="TR2 온도 최저")
-        
-        self.plot_widget.plot(x_data, tr3_max, pen=pg.mkPen(color='c', width=2), name="TR3 온도 최고")
-        self.plot_widget.plot(x_data, tr3_min, pen=pg.mkPen(color='c', width=1, style=Qt.DashLine), name="TR3 온도 최저")
+        self.canvas.draw()
 
+
+    # =====================================================================
+    # 엑셀 출력 기능 (유지)
+    # =====================================================================
     def export_to_excel(self):
         if openpyxl is None:
             QMessageBox.critical(self, "라이브러리 누락", "openpyxl 라이브러리가 설치되어 있지 않습니다.\n명령 프롬프트에서 'pip install openpyxl'을 실행하세요.")
