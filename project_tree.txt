@@ -1,0 +1,46 @@
+├── e_pcmaster_elecroomscada/
+│   ├── free-icon-folder-201505.ico
+│   ├── _tempprory_sql_statement.txt
+│   ├── ui_dialogs.py
+│   ├── db_manager.py
+│   ├── statistics.ico
+│   ├── ui_main_window.py
+│   ├── ui_report_temp.py
+│   ├── project_tree.txt
+│   ├── pcmaster_worker.py
+│   ├── excel_report.py
+│   ├── update_past_events.py
+│   ├── ac_controller.spec
+│   ├── tr_controller.py
+│   ├── clean_test_data.py
+│   ├── learn_ir.py
+│   ├── project_file_lists.py
+│   ├── mariadb_restore.spec
+│   ├── ui_report_power.py
+│   ├── ui_graph_manager.py
+│   ├── 현장 계측 및 설비 .hwp
+│   ├── pcmaster_main.spec
+│   ├── clean_test_data.spec
+│   ├── config.ini
+│   ├── template_전기실_운영일지.xlsx
+│   ├── dummy_plc.py
+│   ├── .gitignore
+│   ├── ac_controller.py
+│   ├── free-icon-folder-2015058.ico
+│   ├── pcmaster_main.py
+│   ├── fix_db_data.spec
+│   ├── migration_db.py
+│   ├── mariadb_backup.py
+│   ├── ui_ventilation.py
+│   ├── elecscadasetup.iss
+│   ├── event_manager.py
+│   ├── mariadb_restore.py
+│   ├── plc_log_lists.xlsx
+│   ├── fix_db_data.py
+│   ├── ui_ac_settings.py
+│   ├── ui_hmi_dashboard.py
+│   ├── datas/
+│   │   ├── template_전기실_운영일지.xlsx
+│   ├── PLC_program/
+│   │   ├── e_pcmaster_elec_room_controll.xpd
+│   │   ├── e_pcmaster_elec_room_controll.xgwx
