@@ -1,5 +1,6 @@
 # ui_main_window.py
 import os
+import sys
 import sqlite3
 import configparser
 from datetime import datetime
@@ -7,7 +8,7 @@ from datetime import datetime
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
                              QLabel, QDateEdit, QPushButton, QStackedWidget, QSplitter, 
                              QTableWidget, QTableWidgetItem, QMessageBox, QFileDialog, 
-                             QDialog, QDoubleSpinBox)
+                             QDialog, QDoubleSpinBox, QHeaderView)
 from PyQt5.QtCore import QTimer, QDate, Qt
 from PyQt5.QtGui import QIcon
 
@@ -262,7 +263,7 @@ class SCADAWindow(QMainWindow):
 
         # --- [3] 이벤트 현황 테이블 ---
         self.alarm_table = QTableWidget()
-        from PyQt5.QtWidgets import QHeaderView
+        
         alarm_headers = ["ID", "발생 시간", "분류", "설비명", "이벤트/알람 내용", "조치 내역", "해제/종료 시간", "가동(초)", "조치자"]
         self.alarm_table.setColumnCount(len(alarm_headers))
         self.alarm_table.setHorizontalHeaderLabels(alarm_headers)
@@ -289,7 +290,6 @@ class SCADAWindow(QMainWindow):
 
     def update_clock(self):
         """1초마다 호출되어 화면의 현재 시간을 갱신합니다."""
-        # 파일 상단에 from datetime import datetime 이 있으므로 바로 datetime.now() 사용
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if hasattr(self, 'lbl_current_time'):
             self.lbl_current_time.setText(f"🕒 현재 시간: {now_str}")
@@ -359,7 +359,6 @@ class SCADAWindow(QMainWindow):
                 self.statusBar().showMessage(f"✅ 정기 자동 백업 완료 ({current_date_str} 자정 기준)", 10000)
 
     def resource_path(self, relative_path):
-        import sys, os
         try:
             base_path = sys._MEIPASS
         except Exception:
@@ -475,7 +474,7 @@ class SCADAWindow(QMainWindow):
         except Exception as e:
             # 🌟 에러가 발생해도 프로그램이 뻗지 않고 경고창만 띄우도록 처리
             # print(f"⚠ 날짜 갱신 중 에러 발생 (프로그램 다운 방어): {e}")
-            from PyQt5.QtWidgets import QMessageBox
+            
             QMessageBox.warning(None, "데이터 갱신 지연", "데이터베이스 연결이 지연되었습니다. 잠시 후 다시 조작해 주세요.")
 
     def click_open_meter_popup(self):
