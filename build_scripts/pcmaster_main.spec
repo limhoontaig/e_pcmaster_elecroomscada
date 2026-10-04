@@ -1,17 +1,32 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 a = Analysis(
-    ['src/pcmaster_main.py'],  # 👈 [수정] 메인 프로그램 위치 (src 폴더 지정)
+    ['../src/pcmaster_main.py'],  # 👈 [수정] 상위 폴더(../)로 나가서 src 폴더를 찾도록 변경
     pathex=[],
     binaries=[],
-    # 👈 [수정] 원본 파일 위치(datas/, assets/)를 명시. 
-    # 단, 파이썬 코드 수정을 피하기 위해 패키징 내부 도착지는 기존처럼 '.' (루트)로 유지합니다.
     datas=[
-        ('datas/template_전기실_운영일지.xlsx', '.'), 
-        ('assets/free-icon-folder-2015058.ico', '.'), 
-        ('config.ini', '.')
+        ('../datas/template_전기실_운영일지.xlsx', '.'), # 👈 [수정] 이하 동일하게 ../ 적용
+        ('../assets/free-icon-folder-2015058.ico', '.'), 
+        ('../config.ini', '.')
     ],
-    hiddenimports=[],
+    hiddenimports=[
+        'src.event_manager',
+        'src.pcmaster_worker',
+        'src.excel_report',
+        'src.tr_controller',
+        'src.ui.ui_report_temp',
+        'src.ui.ui_report_fan_operation',
+        'src.ui.ui_report_fault_status',
+        'src.ui.ui_graph_manager',
+        'src.ui.ui_dialogs',
+        'src.ui.ui_ac_settings',
+        'src.ui.ui_hmi_dashboard',
+        'src.ui.ui_ventilation',
+        'shared.db_manager',
+        'openpyxl',
+        'pymysql',
+        'sqlalchemy',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -26,18 +41,18 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='main', # 생성될 실행파일 이름 (필요시 'pcmaster' 등으로 변경 가능)
+    name='main', 
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/free-icon-folder-2015058.ico'  # 👈 [수정] 실행파일(.exe)의 자체 아이콘 경로 지정
+    icon='../assets/free-icon-folder-2015058.ico'  # 👈 [수정] 아이콘 경로도 ../ 적용
 )
 coll = COLLECT(
     exe,
