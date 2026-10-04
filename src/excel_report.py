@@ -7,27 +7,31 @@ import re
 from datetime import datetime, timedelta
 import openpyxl
 # db_manager에서 MariaDB 연결 함수 및 주요 상수를 가져옵니다.
-from db_manager import (DATA_LABELS, METER_FIELDS, get_field_inspections_for_date,
+from shared.db_manager import (DATA_LABELS, METER_FIELDS, get_field_inspections_for_date,
                         get_db_raw_connection)
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 TEMPLATE_NAME = "template_전기실_운영일지.xlsx"
 
-# 1. 실행 파일과 같은 위치 확인
-path1 = os.path.join(BASE_DIR, "_internal", TEMPLATE_NAME)
-# 2. _internal 폴더 내부 확인
-path2 = os.path.join(BASE_DIR, TEMPLATE_NAME)
+# 1. 개발 환경 (루트 디렉토리의 datas 폴더 내부 확인)
+path1 = os.path.join(BASE_DIR, "datas", TEMPLATE_NAME)
+# 2. PyInstaller 빌드 시 _internal 폴더 내부에 포함된 경우
+path2 = os.path.join(BASE_DIR, "_internal", TEMPLATE_NAME)
+# 3. 실행 파일과 완전히 동일한 위치에 있는 경우
+path3 = os.path.join(BASE_DIR, TEMPLATE_NAME)
 
 if os.path.exists(path1):
     TEMPLATE_IN_APPDATA = path1
 elif os.path.exists(path2):
     TEMPLATE_IN_APPDATA = path2
+elif os.path.exists(path3):
+    TEMPLATE_IN_APPDATA = path3
 else:
-    # 둘 다 없으면 기본값으로 path1을 지정하여 에러 메시지가 나오게 함
+    # 셋 다 없으면 기본값으로 개발 환경 경로(path1)를 지정하여 에러 메시지가 명확하게 나오게 함
     TEMPLATE_IN_APPDATA = path1
 
 def ensure_excel_template():

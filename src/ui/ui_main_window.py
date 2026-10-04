@@ -11,19 +11,19 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGr
 from PyQt5.QtCore import QTimer, QDate, Qt
 from PyQt5.QtGui import QIcon
 
-# 🌟 신규 분리한 그래프 매니저 임포트
-from ui_graph_manager import GraphManager
 
-import db_manager
-import excel_report
-import mariadb_backup
-from ui_dialogs import ManualMeterInputDialog, FieldInspectionDialog 
-from ui_ac_settings import ACSettingsDialog
-from tr_controller import TRFanSettingsDialog
-from ui_hmi_dashboard import HMIDashboardWidget
-from ui_report_power import PowerReportDialog
-from ui_report_temp import TempReportDialog
-import pcmaster_worker 
+from shared import db_manager
+from src import excel_report
+from src import pcmaster_worker 
+
+from src.tr_controller import TRFanSettingsDialog
+from src.ui.ui_graph_manager import GraphManager
+from src.ui.ui_dialogs import ManualMeterInputDialog, FieldInspectionDialog 
+from src.ui.ui_ac_settings import ACSettingsDialog
+from src.ui.ui_hmi_dashboard import HMIDashboardWidget
+from src.ui.ui_report_power import PowerReportDialog
+from src.ui.ui_report_temp import TempReportDialog
+from tools.db_tools import mariadb_backup
 
 class SCADAWindow(QMainWindow):
     def __init__(self):
@@ -274,7 +274,7 @@ class SCADAWindow(QMainWindow):
         self.btn_show_hmi.clicked.connect(lambda: self.stack.setCurrentIndex(0))
         self.btn_show_table.clicked.connect(lambda: self.stack.setCurrentIndex(1))
         self.btn_show_graph.clicked.connect(self.on_graph_tab_changed) 
-        pcmaster_worker.comm_signal.plc_status_update.connect(self.hmi_dashboard.update_plc_status)
+        src.pcmaster_worker.comm_signal.plc_status_update.connect(self.hmi_dashboard.update_plc_status)
         
         # 신규 보고서 버튼 연결
         self.btn_show_report.clicked.connect(lambda: self.stack.setCurrentIndex(3)) 
@@ -360,33 +360,33 @@ class SCADAWindow(QMainWindow):
 
     def load_data(self):
         selected_date = self.qdate.date().toString("yyyy-MM-dd")
-        db_manager.calculate_daily_extremes(selected_date)
+        shared.db_manager.calculate_daily_extremes(selected_date)
         
         try:
-            conn = db_manager.get_db_raw_connection()
+            conn = shared.db_manager.get_db_raw_connection()
             c = conn.cursor()
             
-            query_raw = f"SELECT DATE_FORMAT(log_date, '%%Y-%%m-%%d'), TIME_FORMAT(log_time, '%%H:%%i:%%s'), {', '.join([f'`{n}`' for n in db_manager.DATA_LABELS])} FROM raw_data WHERE log_date = %s ORDER BY log_time DESC"
+            query_raw = f"SELECT DATE_FORMAT(log_date, '%%Y-%%m-%%d'), TIME_FORMAT(log_time, '%%H:%%i:%%s'), {', '.join([f'`{n}`' for n in shared.db_manager.DATA_LABELS])} FROM raw_data WHERE log_date = %s ORDER BY log_time DESC"
             c.execute(query_raw, (selected_date,))
             self.display_table(self.raw_table, c.fetchall())
             
-            query_avg = f"SELECT DATE_FORMAT(log_date, '%%Y-%%m-%%d'), TIME_FORMAT(log_time, '%%H:%%i:%%s'), {', '.join([f'`{n}`' for n in db_manager.DATA_LABELS])} FROM hourly_avg WHERE log_date = %s ORDER BY log_time DESC"
+            query_avg = f"SELECT DATE_FORMAT(log_date, '%%Y-%%m-%%d'), TIME_FORMAT(log_time, '%%H:%%i:%%s'), {', '.join([f'`{n}`' for n in shared.db_manager.DATA_LABELS])} FROM hourly_avg WHERE log_date = %s ORDER BY log_time DESC"
             c.execute(query_avg, (selected_date,))
             self.display_table(self.avg_table, c.fetchall())
             
-            query_ext = f"SELECT DATE_FORMAT(log_date, '%%Y-%%m-%%d'), extreme_type, {', '.join([f'`{n}`' for n in db_manager.DATA_LABELS])} FROM daily_extremes WHERE log_date = %s ORDER BY extreme_type DESC"
+            query_ext = f"SELECT DATE_FORMAT(log_date, '%%Y-%%m-%%d'), extreme_type, {', '.join([f'`{n}`' for n in shared.db_manager.DATA_LABELS])} FROM daily_extremes WHERE log_date = %s ORDER BY extreme_type DESC"
             c.execute(query_ext, (selected_date,))
             self.display_table(self.extreme_table, c.fetchall(), is_extreme=True)
             
             c.close()
             conn.close()
 
-            if hasattr(db_manager, 'get_manual_meter_log_for_table'):
-                manual_row = db_manager.get_manual_meter_log_for_table(selected_date)
+            if hasattr(shared.db_manager, 'get_manual_meter_log_for_table'):
+                manual_row = shared.db_manager.get_manual_meter_log_for_table(selected_date)
                 self.display_manual_table([manual_row])
 
-            if hasattr(db_manager, 'get_field_inspections_for_date'):
-                inspection_data = db_manager.get_field_inspections_for_date(selected_date)
+            if hasattr(shared.db_manager, 'get_field_inspections_for_date'):
+                inspection_data = shared.db_manager.get_field_inspections_for_date(selected_date)
                 self.display_inspection_table(inspection_data)
 
             self.load_alarm_data()
@@ -455,7 +455,7 @@ class SCADAWindow(QMainWindow):
             
             if curr_hour != self.last_hour:
                 self.last_hour = curr_hour
-                db_manager.calculate_hourly_avg()
+                shared.db_manager.calculate_hourly_avg()
                 
             self.load_data()
             self.graph_manager.update_graph()
@@ -489,7 +489,7 @@ class SCADAWindow(QMainWindow):
             if clicked_button == btn_cancel: return
 
             try:
-                db_manager.save_manual_meter_data(save_date, final_data)
+                shared.db_manager.save_manual_meter_data(save_date, final_data)
                 
                 if clicked_button == btn_save_only:
                     self.load_data() 
@@ -528,7 +528,7 @@ class SCADAWindow(QMainWindow):
             round_idx = dialog.combo_round.currentIndex() + 1 
             inspector = dialog.input_name.text().strip()
             
-            existing_inspections = db_manager.get_field_inspections_for_date(save_date)
+            existing_inspections = shared.db_manager.get_field_inspections_for_date(save_date)
             target_round_data = existing_inspections.get(round_idx, {"name": "", "time": ""})
             
             if target_round_data["name"] != "":
@@ -548,7 +548,7 @@ class SCADAWindow(QMainWindow):
                 )
                 if reply == QMessageBox.No: return
             
-            success = db_manager.save_field_inspection(save_date, round_idx, inspector)
+            success = shared.db_manager.save_field_inspection(save_date, round_idx, inspector)
             if success:
                 QMessageBox.information(self, "저장 완료", f"오늘자({save_date}) {round_idx}차 현장 점검 기록이 완료되었습니다.")
                 current_view_date = self.qdate.date().toString("yyyy-MM-dd")

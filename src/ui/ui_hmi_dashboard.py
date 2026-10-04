@@ -4,11 +4,11 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QSizePolicy, QMessageBox)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
-from tr_controller import TRFanSettingsDialog
-from ui_ventilation import VentilationSettingsDialog
-from ui_ac_settings import ACSettingsDialog
+from src.tr_controller import TRFanSettingsDialog
+from ui.ui_ventilation import VentilationSettingsDialog
+from ui.ui_ac_settings import ACSettingsDialog
 
-import pcmaster_worker
+import src.pcmaster_worker
 
 # ==============================================================================
 # 애니메이션 모터 클래스
@@ -194,7 +194,7 @@ class HMIDashboardWidget(QWidget):
 
         main_layout.addWidget(data_frame, 1)
         # 🌟 [신규 추가] 워커에서 쏜 시그널을 내 함수(sync_ui_from_plc)와 연결 (init_ui 맨 마지막 줄에 추가)
-        pcmaster_worker.comm_signal.plc_initial_sync.connect(self.sync_ui_from_plc)
+        src.pcmaster_worker.comm_signal.plc_initial_sync.connect(self.sync_ui_from_plc)
 
     def create_ventilation_panel(self):
         frame = QFrame()
@@ -752,7 +752,7 @@ class HMIDashboardWidget(QWidget):
     def safe_write_bit(self, addr, state, log_msg=""):
         # print(f"👉 [명령] {log_msg} (M0{addr:03d}) ➡️ {state}")
         try:
-            pcmaster_worker.write_plc_bit(addr, state)
+            src.pcmaster_worker.write_plc_bit(addr, state)
         except Exception as e:
             error_msg = f"장비와 통신할 수 없습니다.\n통신선 연결이나 포트 상태를 확인하세요.\n(상세 에러: {e})"
             # print(f"⚠️ [통신 에러 차단] {error_msg}")

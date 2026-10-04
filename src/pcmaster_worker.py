@@ -6,12 +6,13 @@ import struct
 import configparser
 
 import event_manager
+import shared.db_manager
 from datetime import datetime
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from pymodbus.client import ModbusSerialClient 
 
-from db_manager import DATA_LABELS, get_db_raw_connection
+from shared.db_manager import DATA_LABELS, get_db_raw_connection
 from ac_controller import ac_manager 
 
 # 🌟 [신규 추가] PC 수동 조작 이벤트 매핑 딕셔너리
@@ -52,7 +53,8 @@ def to_64bit(regs, idx):
     packed = struct.pack('>HHHH', regs[idx+3], regs[idx+2], regs[idx+1], regs[idx])
     return struct.unpack('>d', packed)[0]
 
-config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
+current_dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(os.path.dirname(current_dir), 'config.ini') # config.ini 파일이 루트에 있음
 
 def get_com_ports():
     config = configparser.ConfigParser()
@@ -122,13 +124,12 @@ def write_plc_bit(address, state):
             action_str = "ON(동작/켜짐)" if state else "OFF(정지/꺼짐)"
             msg = f"화면 수동 제어: {COMMAND_MAP[address]} -> {action_str}"
             
-            import db_manager
             # 분류를 'COMMAND'로 하고, 조작자(operator)를 'SCADA_PC'로 명시
-            event_id = db_manager.log_event_start("COMMAND", f"M{address:04d}", msg, operator="SCADA_PC")
+            event_id = shared.db_manager.log_event_start("COMMAND", f"M{address:04d}", msg, operator="SCADA_PC")
             
             # 명령 하달은 상태 유지가 아닌 '순간의 조작'이므로, 기록 즉시 마감하여 duration을 0으로 만듦
             if event_id:
-                db_manager.log_event_end(event_id, "COMMAND")
+                shared.db_manager.log_event_end(event_id, "COMMAND")
 
 def write_plc_register(address, value):
     if client_plc and client_plc.is_socket_open():
@@ -375,13 +376,14 @@ def serial_receive_thread():
 
                 now_time = time.time()
                 if 통신성공_여부 and (now_time - last_db_save_time >= 59.5):
+                    # print(f"💾 [DB 기록] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -> {수집데이터}")
                     insert_raw_data(수집데이터)
                     last_db_save_time = now_time
 
                 time.sleep(0.1)
 
             except Exception as e:
-                # print(f"❌ [에러 발생 구간: {current_step}] -> 상세 내용: {e}")
+                print(f"❌ [에러 발생 구간: {current_step}] -> 상세 내용: {e}")
                 if client_relay: client_relay.close()
                 if client_plc: client_plc.close()
 

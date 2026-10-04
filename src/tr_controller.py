@@ -123,7 +123,7 @@ class TRFanSettingsDialog(QDialog):
             int(tr3_on * 10), int(tr3_off * 10)
         ]
 
-        pcmaster_worker.pending_tr_fan_values = plc_values
+        src.pcmaster_worker.pending_tr_fan_values = plc_values
 
         QMessageBox.information(self, "적용 중", "설정값을 시스템에 저장하고 PLC로 전송합니다.")
         self.accept()

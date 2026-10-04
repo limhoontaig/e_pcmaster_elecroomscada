@@ -1,5 +1,6 @@
 # main.py
 import sys
+import os
 import threading
 import time
 from PyQt5.QtWidgets import QApplication, QSplashScreen, QDesktopWidget
@@ -11,11 +12,17 @@ from PyQt5.QtCore import Qt, QCoreApplication, QThread, pyqtSignal, QSharedMemor
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import QSharedMemory
 
-from ui_ventilation import VentilationSettingsDialog
+# 현재 파일(pcmaster_main.py)의 상위 폴더(프로젝트 루트)를 모듈 검색 경로에 추가
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from ui.ui_ventilation import VentilationSettingsDialog
 from tr_controller import TRFanSettingsDialog
 
 # 최상위 관리 모듈 로드 (윈도우 로드는 지연 가능하도록 아래에서 하거나 그대로 둠)
-import db_manager
+import shared.db_manager
 import pcmaster_worker
 
 def center_window(widget):
@@ -33,7 +40,7 @@ class InitWorker(QThread):
     def run(self):
         # 1단계: DB 초기화 (가장 오래 걸리는 작업)
         self.progress_signal.emit("⚡ 데이터베이스 연결 및 구성 중...")
-        db_manager.init_db()
+        shared.db_manager.init_db()
         time.sleep(0.3) 
         
         # 2단계: PLC 통신 스레드 기동
@@ -107,7 +114,7 @@ if __name__ == "__main__":
         global win
         
         # 메인 윈도우 모듈을 이 시점에 로드하여 초기 기동 속도를 극대화
-        from ui_main_window import SCADAWindow 
+        from ui.ui_main_window import SCADAWindow 
         
         # DB 작업이 끝난 평온한 상태에서 메인 창 생성
         win = SCADAWindow()
@@ -117,12 +124,10 @@ if __name__ == "__main__":
         win.vent_dialog = VentilationSettingsDialog(win)
         win.tr_dialog = TRFanSettingsDialog(win)
 
-        # =================================================================
         # ⭐ [누락된 부분 추가] pcmaster_worker의 시그널을 화면의 상태 변경 함수와 연결합니다!
-        import pcmaster_worker
         pcmaster_worker.comm_signal.status_changed.connect(win.update_rs485_status)
         pcmaster_worker.comm_signal.plc_data_update.connect(win.hmi_dashboard.update_plc_data)
-        # =================================================================
+        pcmaster_worker.comm_signal.plc_status_update.connect(win.hmi_dashboard.update_plc_status)
         
         # 최상단 고정으로 메인 화면 표시
         win.setWindowFlags(win.windowFlags() | Qt.WindowStaysOnTopHint)

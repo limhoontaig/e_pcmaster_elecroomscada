@@ -3,7 +3,7 @@ import os
 import subprocess
 import configparser
 from datetime import datetime
-from db_manager import DB_CONFIG
+from shared.db_manager import DB_CONFIG
 
 # config.ini 파일 읽기
 config = configparser.ConfigParser()

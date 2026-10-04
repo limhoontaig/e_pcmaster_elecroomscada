@@ -11,7 +11,7 @@ from PyQt5 import QtGui
 from PyQt5.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PyQt5.QtGui import QPainter, QPageLayout, QFontMetrics, QFont
 
-import db_manager
+import shared.db_manager
 
 # 엑셀 출력을 위한 openpyxl
 try:
