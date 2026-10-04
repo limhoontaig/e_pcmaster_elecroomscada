@@ -22,6 +22,7 @@ from src.ui.ui_dialogs import ManualMeterInputDialog, FieldInspectionDialog
 from src.ui.ui_ac_settings import ACSettingsDialog
 from src.ui.ui_hmi_dashboard import HMIDashboardWidget
 from src.ui.ui_report_fan_operation import FanOperationReportDialog
+from src.ui.ui_report_fault_status import FaultStatusReportDialog
 from src.ui.ui_report_power import PowerReportDialog
 from src.ui.ui_report_temp import TempReportDialog
 from tools.db_tools import mariadb_backup
@@ -279,6 +280,7 @@ class SCADAWindow(QMainWindow):
         
         self.btn_show_report.clicked.connect(lambda: self.stack.setCurrentIndex(3)) 
         self.btn_rep_fan.clicked.connect(self.open_fan_report_dialog)
+        self.btn_rep_alarm.clicked.connect(self.open_fault_report_dialog)
         self.btn_export_excel.clicked.connect(self.export_excel_click)
         self.btn_meter_input.clicked.connect(self.click_open_meter_popup)
         self.qdate.dateChanged.connect(self.auto_refresh)
@@ -330,6 +332,11 @@ class SCADAWindow(QMainWindow):
     def open_temp_report_dialog(self):
         """온도 보고서 전용 독립 창을 띄웁니다."""
         dialog = TempReportDialog(self)
+        dialog.exec_()
+
+    def open_fault_report_dialog(self):
+        """설비 장애 및 알람 통계 보고서 창을 띄웁니다."""
+        dialog = FaultStatusReportDialog(self)
         dialog.exec_()
 
     def open_ac_settings_dialog(self, event):
