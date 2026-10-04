@@ -12,16 +12,16 @@ from PyQt5.QtCore import Qt, QCoreApplication, QThread, pyqtSignal, QSharedMemor
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import QSharedMemory
 
+from shared import db_manager
+from src import pcmaster_worker
+from src.tr_controller import TRFanSettingsDialog
+from src.ui.ui_ventilation import VentilationSettingsDialog
+
 # 현재 파일(pcmaster_main.py)의 상위 폴더(프로젝트 루트)를 모듈 검색 경로에 추가
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-
-from shared import db_manager
-from src import pcmaster_worker
-from src.tr_controller import TRFanSettingsDialog
-from src.ui.ui_ventilation import VentilationSettingsDialog
 
 def center_window(widget):
     """위젯을 화면 중앙으로 이동시키는 함수"""
@@ -147,10 +147,6 @@ if __name__ == "__main__":
     worker.start()
 
     def cleanup_before_exit():
-        # print("프로그램 종료 중... 통신 스레드를 안전하게 중지합니다.")
-        import pcmaster_worker
-        import time
-        
         # 워커 파일의 무한 루프 플래그를 False로 변경
         pcmaster_worker.is_running = False 
         
