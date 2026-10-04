@@ -9,21 +9,19 @@ from PyQt5 import QtGui
 from PyQt5.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PyQt5.QtGui import QPainter, QPageLayout, QFontMetrics, QFont
 
-from shared import db_manager
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.ticker as ticker
 
-# 엑셀 출력을 위한 openpyxl
 try:
     import openpyxl
     from openpyxl.styles import Font as ExcelFont, Alignment, Border, Side, PatternFill
 except ImportError:
     openpyxl = None
 
-# matplotlib 및 pandas 임포트
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-import matplotlib.ticker as ticker
+from shared import db_manager
 
 # 한글 폰트 및 마이너스 부호 깨짐 방지
 plt.rcParams['font.family'] = 'Malgun Gothic'
