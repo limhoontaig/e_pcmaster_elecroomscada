@@ -107,7 +107,7 @@ client_relay = ModbusSerialClient(port=COM_PORT_RELAY, baudrate=BAUD_RATE, timeo
 if COM_PORT_RELAY == COM_PORT_PLC:
     client_plc = client_relay
 else:
-    client_plc = ModbusSerialClient(port=COM_PORT_PLC, baudrate=BAUD_RATE, timeout=0.3, stopbits=1, bytesize=8, parity='N')
+    client_plc = ModbusSerialClient(port=COM_PORT_PLC, baudrate=BAUD_RATE, timeout=0.4, stopbits=1, bytesize=8, parity='N')
     
 def write_plc_bit(address, state):
     if client_plc and client_plc.is_socket_open():
