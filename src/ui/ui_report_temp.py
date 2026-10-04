@@ -6,12 +6,10 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
                              QListWidget, QAbstractItemView)
 from PyQt5.QtCore import Qt, QRect
 from PyQt5 import QtGui
-
-# 인쇄 및 PDF 저장을 위한 모듈 임포트
 from PyQt5.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PyQt5.QtGui import QPainter, QPageLayout, QFontMetrics, QFont
 
-import shared.db_manager
+from shared import db_manager
 
 # 엑셀 출력을 위한 openpyxl
 try:

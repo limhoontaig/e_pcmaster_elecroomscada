@@ -4,7 +4,7 @@ import configparser
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QDoubleSpinBox, QPushButton, QMessageBox, QGroupBox)
 
-import pcmaster_worker 
+from src import pcmaster_worker 
 
 # config.ini 파일 경로 설정
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.ini')
@@ -59,7 +59,6 @@ class TRFanSettingsDialog(QDialog):
 
     def update_worker(self):
         # 🌟 워커의 pending_tr_fan_values 변수에 1회성 전송용 리스트를 채워줍니다.
-        import pcmaster_worker
         pcmaster_worker.pending_tr_fan_values = [
             int(self.tr1_on * 10),   # .value() 제거
             int(self.tr1_off * 10),  # .value() 제거
@@ -123,7 +122,7 @@ class TRFanSettingsDialog(QDialog):
             int(tr3_on * 10), int(tr3_off * 10)
         ]
 
-        src.pcmaster_worker.pending_tr_fan_values = plc_values
+        pcmaster_worker.pending_tr_fan_values = plc_values
 
         QMessageBox.information(self, "적용 중", "설정값을 시스템에 저장하고 PLC로 전송합니다.")
         self.accept()

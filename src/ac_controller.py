@@ -4,7 +4,8 @@ import threading
 import broadlink
 import configparser
 import os
-import shared.db_manager
+
+from shared import db_manager
 
 class ACController:
     def __init__(self):

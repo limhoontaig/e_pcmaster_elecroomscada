@@ -1,6 +1,6 @@
 # update_past_events.py
 
-import db_manager
+from shared import db_manager
 
 def update_past_logs():
     conn = db_manager.get_db_raw_connection()

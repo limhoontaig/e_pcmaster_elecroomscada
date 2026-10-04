@@ -3,7 +3,7 @@ import sqlite3
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QDateEdit, QGroupBox, QFormLayout, QLineEdit, QGridLayout, QDialogButtonBox, QMessageBox, QComboBox
 from PyQt5.QtCore import QDate, Qt
 
-import shared.db_manager # DB 조회를 위해 가져옴
+from shared import db_manager # DB 조회를 위해 가져옴
 
 class ManualMeterInputDialog(QDialog):
     """독립된 3개 계량장치의 11개 지침을 날짜별로 통합 입력/수정하는 팝업 창"""
@@ -152,7 +152,7 @@ class ManualMeterInputDialog(QDialog):
     def load_date_data(self):
         """날짜가 변경될 때마다 DB를 뒤져 해당 일자의 기존 수치를 양식에 표기합니다."""
         date_str = self.date_edit.date().toString("yyyy-MM-dd")
-        current_data = shared.db_manager.get_manual_meter_data(date_str)
+        current_data = db_manager.get_manual_meter_data(date_str)
         
         for field, value in current_data.items():
             if field in self.inputs: 

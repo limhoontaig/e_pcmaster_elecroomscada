@@ -9,12 +9,11 @@ import matplotlib.ticker as ticker
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QListWidget, QAbstractItemView, QPushButton, QFileDialog, QMessageBox
 from PyQt5.QtCore import Qt
-# 🌟 미리보기창(QPrintPreviewDialog) 및 관련 모듈 임포트
 from PyQt5.QtGui import QPainter, QPageLayout 
 from PyQt5.QtPrintSupport import QPrinter, QPrintPreviewDialog
 
-import shared.db_manager
-from shared.db_manager import get_db_connection, get_db_raw_connection  # 💡 MariaDB 커넥션 함수 추가
+# from shared import db_manager
+from shared.db_manager import get_db_connection, get_db_raw_connection, DATA_LABELS  # 💡 MariaDB 커넥션 함수 추가
 
 # 그래프 내부에 한글(맑은 고딕)과 마이너스 부호가 깨지는 것을 방지합니다.
 plt.rcParams['font.family'] = 'Malgun Gothic'
@@ -35,7 +34,7 @@ class GraphManager(QWidget):
         # [왼쪽 축] 다중 선택 리스트 위젯
         self.data_selector = QListWidget()
         self.data_selector.setSelectionMode(QAbstractItemView.MultiSelection) 
-        self.data_selector.addItems(shared.db_manager.DATA_LABELS)
+        self.data_selector.addItems(DATA_LABELS)
         self.data_selector.setMaximumHeight(80) 
         
         # [오른쪽 보조축] 다중 선택 리스트 위젯

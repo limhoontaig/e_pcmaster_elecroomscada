@@ -13,7 +13,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from pymodbus.client import ModbusSerialClient 
 
 from shared.db_manager import DATA_LABELS, get_db_raw_connection
-from ac_controller import ac_manager 
+from src.ac_controller import ac_manager 
 
 # 🌟 [신규 추가] PC 수동 조작 이벤트 매핑 딕셔너리
 COMMAND_MAP = {

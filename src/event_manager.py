@@ -74,11 +74,6 @@ def process_plc_events(current_bits):
 
     last_plc_bits = current_bits[:]
 
-    # event_manager.py
-from shared import db_manager
-
-# --- (기존 last_plc_bits, active_events 및 PLC_TAG_MAP 부분 유지) ---
-
 # =====================================================================
 # 🌟 [신규 추가] 계전기용 이벤트 맵 및 상태 변수
 # =====================================================================

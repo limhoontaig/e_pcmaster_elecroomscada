@@ -3,7 +3,7 @@ import os
 import configparser
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout,
                              QLabel, QPushButton, QDoubleSpinBox, QMessageBox)
-import src.pcmaster_worker
+from src import pcmaster_worker
 
 class VentilationSettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -148,7 +148,7 @@ class VentilationSettingsDialog(QDialog):
 
     def update_worker(self):
         # 💡 PC마스터 워커의 전역 변수 메모장에 현재 설정값을 딕셔너리로 갱신해 둡니다.
-        src.pcmaster_worker.vent_settings = {
+        pcmaster_worker.vent_settings = {
             'w_on': self.w_on.value(), 'w_off': self.w_off.value(),
             'sp_on': self.sp_on.value(), 'sp_off': self.sp_off.value(),
             'su_on': self.su_on.value(), 'su_off': self.su_off.value(),

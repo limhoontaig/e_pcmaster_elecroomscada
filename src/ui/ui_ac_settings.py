@@ -5,7 +5,7 @@ import configparser
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, 
                              QLabel, QPushButton, QDoubleSpinBox, QMessageBox)
 from src.ac_controller import ac_manager  # 분리된 에어컨 매니저 호출
-import src.pcmaster_worker # 💡 PLC 통신 일꾼 추가
+# from src import pcmaster_worker # 💡 PLC 통신 일꾼 추가
 
 class ACSettingsDialog(QDialog):
     def __init__(self, parent=None):

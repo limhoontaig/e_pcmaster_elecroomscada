@@ -3,7 +3,7 @@ import os
 import sqlite3
 import pymysql
 # 기존 db_manager에서 설정값들을 가져옵니다.
-from db_manager import DB_CONFIG, DATA_LABELS, METER_FIELDS
+from shared.db_manager import DB_CONFIG, DATA_LABELS, METER_FIELDS
 
 DB_DIR = os.path.join(os.environ['LOCALAPPDATA'], 'ElecRoomSCADA')
 

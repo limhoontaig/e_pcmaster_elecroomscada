@@ -1,5 +1,5 @@
 # fix_db_data.py
-import db_manager
+from shared import db_manager
 
 def fix_database_errors():
     target_date = "2026-08-05"

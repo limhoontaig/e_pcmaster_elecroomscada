@@ -18,12 +18,10 @@ project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from ui.ui_ventilation import VentilationSettingsDialog
-from tr_controller import TRFanSettingsDialog
-
-# 최상위 관리 모듈 로드 (윈도우 로드는 지연 가능하도록 아래에서 하거나 그대로 둠)
-import shared.db_manager
-import pcmaster_worker
+from shared import db_manager
+from src import pcmaster_worker
+from src.tr_controller import TRFanSettingsDialog
+from src.ui.ui_ventilation import VentilationSettingsDialog
 
 def center_window(widget):
     """위젯을 화면 중앙으로 이동시키는 함수"""
@@ -40,7 +38,7 @@ class InitWorker(QThread):
     def run(self):
         # 1단계: DB 초기화 (가장 오래 걸리는 작업)
         self.progress_signal.emit("⚡ 데이터베이스 연결 및 구성 중...")
-        shared.db_manager.init_db()
+        db_manager.init_db()
         time.sleep(0.3) 
         
         # 2단계: PLC 통신 스레드 기동
