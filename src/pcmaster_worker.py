@@ -1,17 +1,17 @@
-# pcmaster_worker.py
+configparser# pcmaster_worker.py
 import time
 import os
 import platform
 import struct
 import configparser
 
-import event_manager
-import shared.db_manager
 from datetime import datetime
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from pymodbus.client import ModbusSerialClient 
 
+from shared import db_manager
+from src import event_manager
 from shared.db_manager import DATA_LABELS, get_db_raw_connection
 from src.ac_controller import ac_manager 
 
@@ -125,11 +125,11 @@ def write_plc_bit(address, state):
             msg = f"화면 수동 제어: {COMMAND_MAP[address]} -> {action_str}"
             
             # 분류를 'COMMAND'로 하고, 조작자(operator)를 'SCADA_PC'로 명시
-            event_id = shared.db_manager.log_event_start("COMMAND", f"M{address:04d}", msg, operator="SCADA_PC")
+            event_id = db_manager.log_event_start("COMMAND", f"M{address:04d}", msg, operator="SCADA_PC")
             
             # 명령 하달은 상태 유지가 아닌 '순간의 조작'이므로, 기록 즉시 마감하여 duration을 0으로 만듦
             if event_id:
-                shared.db_manager.log_event_end(event_id, "COMMAND")
+                db_manager.log_event_end(event_id, "COMMAND")
 
 def write_plc_register(address, value):
     if client_plc and client_plc.is_socket_open():
