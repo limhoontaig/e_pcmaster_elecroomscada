@@ -369,11 +369,14 @@ def serial_receive_thread():
                 # [6] DB 로깅 (58초마다 기록)
                 # =============================================================
                 current_step = "데이터베이스 로깅 및 시그널 전송"
-                if 통신성공_여부:
-                    comm_signal.status_changed.emit(True)
-                else:
-                    comm_signal.status_changed.emit(False)
-
+                try:
+                    if 통신성공_여부:
+                        comm_signal.status_changed.emit(True)
+                    else:
+                        comm_signal.status_changed.emit(False)
+                except RuntimeError:
+                    pass # 프로그램 종료 중 화면 객체가 사라졌을 때 발생하는 에러를 조용히 무시
+                
                 now_time = time.time()
                 if 통신성공_여부 and (now_time - last_db_save_time >= 59.5):
                     # print(f"💾 [DB 기록] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -> {수집데이터}")
