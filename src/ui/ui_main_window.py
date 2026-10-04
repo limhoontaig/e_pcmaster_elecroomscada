@@ -21,6 +21,7 @@ from src.ui.ui_graph_manager import GraphManager
 from src.ui.ui_dialogs import ManualMeterInputDialog, FieldInspectionDialog 
 from src.ui.ui_ac_settings import ACSettingsDialog
 from src.ui.ui_hmi_dashboard import HMIDashboardWidget
+from src.ui.ui_report_fan_operation import FanOperationReportDialog
 from src.ui.ui_report_power import PowerReportDialog
 from src.ui.ui_report_temp import TempReportDialog
 from tools.db_tools import mariadb_backup
@@ -270,15 +271,14 @@ class SCADAWindow(QMainWindow):
 
         self.stack.addWidget(self.page_report)
 
+        pcmaster_worker.comm_signal.plc_status_update.connect(self.hmi_dashboard.update_plc_status)
         # ==================== 3. 이벤트 시그널 연결 ====================
         self.btn_show_hmi.clicked.connect(lambda: self.stack.setCurrentIndex(0))
         self.btn_show_table.clicked.connect(lambda: self.stack.setCurrentIndex(1))
         self.btn_show_graph.clicked.connect(self.on_graph_tab_changed) 
-        pcmaster_worker.comm_signal.plc_status_update.connect(self.hmi_dashboard.update_plc_status)
         
-        # 신규 보고서 버튼 연결
         self.btn_show_report.clicked.connect(lambda: self.stack.setCurrentIndex(3)) 
-        
+        self.btn_rep_fan.clicked.connect(self.open_fan_report_dialog)
         self.btn_export_excel.clicked.connect(self.export_excel_click)
         self.btn_meter_input.clicked.connect(self.click_open_meter_popup)
         self.qdate.dateChanged.connect(self.auto_refresh)
@@ -316,6 +316,11 @@ class SCADAWindow(QMainWindow):
         except Exception as e:
             pass
             # print(f"알람 데이터 표출 에러: {e}")
+    
+    def open_fan_report_dialog(self):
+        """냉각 및 환기 설비 통계 보고서 창을 띄웁니다."""
+        dialog = FanOperationReportDialog(self)
+        dialog.exec_()
     
     def open_power_report_dialog(self):
         """전력 통계 보고서 전용 독립 창을 띄웁니다."""
