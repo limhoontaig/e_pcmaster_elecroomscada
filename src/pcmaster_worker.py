@@ -1,4 +1,4 @@
-configparser# pcmaster_worker.py
+# pcmaster_worker.py
 import time
 import os
 import platform
