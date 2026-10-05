@@ -12,6 +12,12 @@ from PyQt5.QtCore import Qt, QCoreApplication, QThread, pyqtSignal, QSharedMemor
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import QSharedMemory
 
+# 현재 파일(pcmaster_main.py)의 상위 폴더(프로젝트 루트)를 모듈 검색 경로에 추가
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from shared import db_manager
 from src import pcmaster_worker
 from src.tr_controller import TRFanSettingsDialog

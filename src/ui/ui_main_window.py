@@ -12,6 +12,11 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGr
 from PyQt5.QtCore import QTimer, QDate, Qt
 from PyQt5.QtGui import QIcon
 
+current_dir = os.path.dirname(os.path.abspath(__file__))      # src/ui
+src_dir = os.path.dirname(current_dir)                        # src
+project_root = os.path.dirname(src_dir)                       # 프로젝트 루트 (e_pcmaster_elecroomscada)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from shared import db_manager
 from src import excel_report
@@ -22,6 +27,7 @@ from src.ui.ui_graph_manager import GraphManager
 from src.ui.ui_dialogs import ManualMeterInputDialog, FieldInspectionDialog 
 from src.ui.ui_ac_settings import ACSettingsDialog
 from src.ui.ui_hmi_dashboard import HMIDashboardWidget
+from src.ui.ui_clean_data_dialog import CleanDataDialog
 from src.ui.ui_report_fan_operation import FanOperationReportDialog
 from src.ui.ui_report_fault_status import FaultStatusReportDialog
 from src.ui.ui_report_power import PowerReportDialog
@@ -212,10 +218,25 @@ class SCADAWindow(QMainWindow):
         self.page_report = QWidget()
         report_layout = QVBoxLayout(self.page_report)
         
+        header_layout = QHBoxLayout()
+        
+        self.btn_open_clean_dialog = QPushButton("🛠️ DB 오류 수정")
+        self.btn_open_clean_dialog.setMinimumHeight(40)
+        self.btn_open_clean_dialog.setStyleSheet("""
+            background-color: #d35400; color: white; font-weight: bold; 
+            font-size: 14px; padding: 5px 15px; border-radius: 6px;
+        """)
+        self.btn_open_clean_dialog.clicked.connect(self.open_clean_data_dialog)
+
         report_header = QLabel("📊 SCADA 종합 통계 및 분석 보고서 포털")
-        report_header.setAlignment(Qt.AlignCenter)
         report_header.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin: 15px 0;")
-        report_layout.addWidget(report_header)
+        
+        header_layout.addWidget(self.btn_open_clean_dialog)
+        header_layout.addStretch()
+        header_layout.addWidget(report_header)
+        header_layout.addStretch() # 좌우 균형을 맞춰 제목을 정중앙에 가깝게 배치
+        
+        report_layout.addLayout(header_layout)
 
         # --- [1] 중간 메뉴 버튼 4개를 가로 1줄로 배치 (세로 공간 확보) ---
         menu_layout = QHBoxLayout()
@@ -319,6 +340,17 @@ class SCADAWindow(QMainWindow):
             pass
             # print(f"알람 데이터 표출 에러: {e}")
     
+    def open_clean_data_dialog(self):
+        """운영 데이터 오류 정제 및 통계 재산출 다이얼로그를 팝업합니다."""
+        dialog = CleanDataDialog(self)
+        result = dialog.exec_()
+        
+        # 다이얼로그에서 성공적으로 정제를 마치고 닫았을 경우 현재 화면(테이블/그래프)을 새로고침
+        if result == QDialog.Accepted:
+            self.load_data()
+            if hasattr(self, 'graph_manager'):
+                self.graph_manager.update_graph()
+
     def open_fan_report_dialog(self):
         """냉각 및 환기 설비 통계 보고서 창을 띄웁니다."""
         dialog = FanOperationReportDialog(self)
