@@ -3,7 +3,9 @@
 
 [Setup]
 AppName=전기실SCADA
-AppVersion=1.0
+AppVersion=0.0
+; AppId 절대 변경 금지
+AppId={{61aedec0-b550-40e2-8e2f-370abc090153} 
 DefaultDirName={autopf}\ElecRoomSCADA
 DefaultGroupName=전기실SCADA
 OutputBaseFilename=전기실SCADA_Setup
@@ -36,3 +38,34 @@ Name: "{group}\전기실SCADA"; Filename: "{app}\main.exe"; IconFilename: "{app}
 [Run]
 ; 설치 완료 후 바로 실행
 Filename: "{app}\main.exe"; Description: "프로그램 실행"; Flags: nowait postinstall skipifsilent
+
+[Code]
+{ =====================================================================
+  🌟 [고급 기능] 기존에 설치된 버전이 있다면 자동으로 조용히(Silent) 지우고 재설치하는 코드
+  ===================================================================== }
+function InitializeSetup(): Boolean;
+var
+  OldUninstallPath: String;
+  ResultCode: Integer;
+begin
+  Result := True;
+  
+  { 레지스트리에서 이전 설치된 언인스톨러 경로를 자동으로 찾아냄 }
+  if RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1', 'UninstallString', OldUninstallPath) or
+     RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1', 'UninstallString', OldUninstallPath) then
+  begin
+    { 사용자에게 기존 프로그램을 지우고 새로 설치할 것인지 물어보기 (원하시면 이 메시지 박스를 생략하고 강제로 지울 수도 있습니다) }
+    if SuppressibleMsgBox('이전 버전의 전기실 SCADA 프로그램이 이미 설치되어 있습니다.'#13#10'기존 프로그램을 완전히 삭제하고 최신 버전으로 덮어씁니다.'#13#10'계속하시겠습니까?', mbInformation, MB_OKCANCEL, IDOK) = IDOK then
+    begin
+      { 따옴표 제거 }
+      StringChangeEx(OldUninstallPath, '"', '', True);
+      
+      { 조용히(Silent) 기존 언인스톨러 실행하여 삭제 진행 }
+      Exec(OldUninstallPath, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end
+    else
+    begin
+      Result := False; { 사용자가 취소를 누르면 설치 중단 }
+    end;
+  end;
+end;
