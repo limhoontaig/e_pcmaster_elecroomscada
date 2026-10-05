@@ -15,6 +15,7 @@ from PyQt5.QtCore import QSharedMemory
 from shared import db_manager
 from src import pcmaster_worker
 from src.tr_controller import TRFanSettingsDialog
+from src.ui.ui_main_window import SCADAWindow
 from src.ui.ui_ventilation import VentilationSettingsDialog
 
 # 현재 파일(pcmaster_main.py)의 상위 폴더(프로젝트 루트)를 모듈 검색 경로에 추가
@@ -110,10 +111,6 @@ if __name__ == "__main__":
     # ⭐ [핵심 개선] DB 초기화 등이 '완전히 끝난 후' 메인 윈도우를 비로서 임포트하고 생성합니다.
     def on_init_finished():
         global win
-        
-        # 메인 윈도우 모듈을 이 시점에 로드하여 초기 기동 속도를 극대화
-        from ui.ui_main_window import SCADAWindow 
-        
         # DB 작업이 끝난 평온한 상태에서 메인 창 생성
         win = SCADAWindow()
         center_window(win)
