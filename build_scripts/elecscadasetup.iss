@@ -9,28 +9,29 @@ DefaultGroupName=전기실SCADA
 OutputBaseFilename=전기실SCADA_Setup
 Compression=lzma
 SolidCompression=yes
+OutputDir=..\Outputs
 
 [Files]
-; 1. 먼저 _internal 폴더의 모든 내용을 복사합니다.
+; 1. _internal 폴더 복사
 Source: "E:\e_pcmaster_elecroomscada\dist\main\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; 2. main.exe를 복사합니다.
+; 2. main.exe 복사
 Source: "E:\e_pcmaster_elecroomscada\dist\main\main.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; 3. 템플릿 파일만 별도로 지정하여 설치 폴더 루트({app})에 복사합니다.
+; 3. 템플릿 파일 설치 폴더 루트({app})에 복사
 Source: "E:\e_pcmaster_elecroomscada\dist\main\_internal\template_전기실_운영일지.xlsx"; DestDir: "{app}"; Flags: ignoreversion
 
-; 4. 아이콘 파일 (나중에 바로가기 생성 시 경로를 참조하기 위함)
-Source: "free-icon-folder-2015058.ico"; DestDir: "{app}"
+; 4. 아이콘 파일 복사 (.iss 위치에 따라 경로 확인)
+Source: "..\assets\free-icon-folder-2015058.ico"; DestDir: "{app}"
 
-; 5. config.ini 파일만 별도로 지정하여 설치 폴더 루트({app})에 복사합니다.
+; 5. config.ini 파일 설치 폴더 루트({app})에 복사
 Source: "E:\e_pcmaster_elecroomscada\dist\main\_internal\config.ini"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; 바탕화면에 아이콘 생성
+; 바탕화면에 아이콘 생성 (WorkingDir 지정으로 설정 파일/템플릿 경로 안정성 확보)
 Name: "{autodesktop}\전기실SCADA"; Filename: "{app}\main.exe"; IconFilename: "{app}\free-icon-folder-2015058.ico"; WorkingDir: "{app}"
 ; 시작 메뉴에 바로가기 생성
-Name: "{group}\전기실SCADA"; Filename: "{app}\main.exe"; IconFilename: "{app}\free-icon-folder-2015058.ico"
+Name: "{group}\전기실SCADA"; Filename: "{app}\main.exe"; IconFilename: "{app}\free-icon-folder-2015058.ico"; WorkingDir: "{app}"
 
 [Run]
 ; 설치 완료 후 바로 실행

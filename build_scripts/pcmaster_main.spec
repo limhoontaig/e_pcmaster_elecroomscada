@@ -1,32 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 a = Analysis(
-    ['../src/pcmaster_main.py'],  # 👈 [수정] 상위 폴더(../)로 나가서 src 폴더를 찾도록 변경
-    pathex=[],
+    ['../src/pcmaster_main.py'], 
+    pathex=['..'],
     binaries=[],
     datas=[
-        ('../datas/template_전기실_운영일지.xlsx', '.'), # 👈 [수정] 이하 동일하게 ../ 적용
+        ('../datas/template_전기실_운영일지.xlsx', '.'), 
         ('../assets/free-icon-folder-2015058.ico', '.'), 
         ('../config.ini', '.')
     ],
-    hiddenimports=[
-        'src.event_manager',
-        'src.pcmaster_worker',
-        'src.excel_report',
-        'src.tr_controller',
-        'src.ui.ui_report_temp',
-        'src.ui.ui_report_fan_operation',
-        'src.ui.ui_report_fault_status',
-        'src.ui.ui_graph_manager',
-        'src.ui.ui_dialogs',
-        'src.ui.ui_ac_settings',
-        'src.ui.ui_hmi_dashboard',
-        'src.ui.ui_ventilation',
-        'shared.db_manager',
-        'openpyxl',
-        'pymysql',
-        'sqlalchemy',
-    ],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
