@@ -20,7 +20,7 @@ class TRFanSettingsDialog(QDialog):
             src_dir = os.path.dirname(current_file)      # .../src
             base_dir = os.path.dirname(src_dir)          # .../ (최상단 루트)
             
-        config_path = os.path.join(base_dir, 'config.ini')
+        self.config_path = os.path.join(base_dir, 'config.ini')
 
         self.config = configparser.ConfigParser()
         self.load_settings()
