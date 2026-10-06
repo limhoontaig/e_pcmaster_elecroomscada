@@ -1,13 +1,11 @@
 # tr_controller.py
 import os
+import sys
 import configparser
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QDoubleSpinBox, QPushButton, QMessageBox, QGroupBox)
 
 from src import pcmaster_worker 
-
-# config.ini 파일 경로 설정
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.ini')
 
 class TRFanSettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -15,13 +13,20 @@ class TRFanSettingsDialog(QDialog):
         self.setWindowTitle("변압기 개별 환기팬 온도 설정")
         self.setFixedSize(350, 380)
 
-        # 🌟 1. 다이얼로그 시작 시 config.ini에서 기존 설정값 읽어오기
+        # 🌟 [변경] 공통 루트 config.ini 경로 설정
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            base_dir = os.path.dirname(current_dir)
+            
+        self.config_path = os.path.join(base_dir, 'config.ini')
+
         self.config = configparser.ConfigParser()
         self.load_settings()
 
         main_layout = QVBoxLayout()
 
-        # 🌟 2. 파일에서 읽어온 값(self.tr1_on 등)을 초기값으로 부여
         self.spin_tr1_on, self.spin_tr1_off = self.create_tr_group("TR1 (1호기)", self.tr1_on, self.tr1_off, main_layout)
         self.spin_tr2_on, self.spin_tr2_off = self.create_tr_group("TR2 (2호기)", self.tr2_on, self.tr2_off, main_layout)
         self.spin_tr3_on, self.spin_tr3_off = self.create_tr_group("TR3 (3호기)", self.tr3_on, self.tr3_off, main_layout)
@@ -39,14 +44,12 @@ class TRFanSettingsDialog(QDialog):
         self.btn_cancel.clicked.connect(self.reject)
 
     def load_settings(self):
-        """config.ini 파일에서 온도 설정값을 불러오는 함수"""
-        # 파일이 없거나 값이 없을 때 사용할 기본값
         self.tr1_on, self.tr1_off = 55.0, 50.0
         self.tr2_on, self.tr2_off = 55.0, 50.0
         self.tr3_on, self.tr3_off = 55.0, 50.0
 
-        if os.path.exists(CONFIG_PATH):
-            self.config.read(CONFIG_PATH, encoding='utf-8')
+        if os.path.exists(self.config_path):
+            self.config.read(self.config_path, encoding='utf-8')
             if 'TR_SETTINGS' in self.config:
                 sec = self.config['TR_SETTINGS']
                 self.tr1_on = sec.getfloat('tr1_on', 55.0)
@@ -58,14 +61,13 @@ class TRFanSettingsDialog(QDialog):
         self.update_worker()
 
     def update_worker(self):
-        # 🌟 워커의 pending_tr_fan_values 변수에 1회성 전송용 리스트를 채워줍니다.
         pcmaster_worker.pending_tr_fan_values = [
-            int(self.tr1_on * 10),   # .value() 제거
-            int(self.tr1_off * 10),  # .value() 제거
-            int(self.tr2_on * 10),   # .value() 제거
-            int(self.tr2_off * 10),  # .value() 제거
-            int(self.tr3_on * 10),   # .value() 제거
-            int(self.tr3_off * 10)   # .value() 제거
+            int(self.tr1_on * 10),
+            int(self.tr1_off * 10),
+            int(self.tr2_on * 10),
+            int(self.tr2_off * 10),
+            int(self.tr3_on * 10),
+            int(self.tr3_off * 10)
         ]
 
     def create_tr_group(self, title, current_on, current_off, parent_layout):
@@ -100,7 +102,6 @@ class TRFanSettingsDialog(QDialog):
             QMessageBox.warning(self, "설정 오류", "모든 변압기의 '정지 온도'는 '기동 온도'보다 낮아야 합니다!")
             return
 
-        # 🌟 3. [추가] 변경된 값을 config.ini 파일에 기록하여 기억시킴
         if 'TR_SETTINGS' not in self.config:
             self.config['TR_SETTINGS'] = {}
             
@@ -112,10 +113,9 @@ class TRFanSettingsDialog(QDialog):
         sec['tr3_on'] = str(tr3_on)
         sec['tr3_off'] = str(tr3_off)
 
-        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        with open(self.config_path, 'w', encoding='utf-8') as f:
             self.config.write(f)
 
-        # 4. PLC로 전송하기 위해 10배수 정수로 변환 후 일꾼에게 전달
         plc_values = [
             int(tr1_on * 10), int(tr1_off * 10),
             int(tr2_on * 10), int(tr2_off * 10),

@@ -1,19 +1,27 @@
 # ui_ac_settings.py
 
 import os
+import sys
 import configparser
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, 
                              QLabel, QPushButton, QDoubleSpinBox, QMessageBox)
 from src.ac_controller import ac_manager  # 분리된 에어컨 매니저 호출
-# from src import pcmaster_worker # 💡 PLC 통신 일꾼 추가
 
 class ACSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("⚙️ 에어컨 및 환기팬 종합 제어 (관리자 전용)")
-        # 💡 내용이 많아졌으므로 세로 높이를 420에서 580으로 살짝 키웠습니다.
         self.setFixedSize(380, 450)
-        self.config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
+        
+        # 🌟 [변경] 컴파일 환경 및 소스 실행 환경에 따른 안전한 루트 config.ini 경로 설정
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            base_dir = os.path.dirname(current_dir) # src의 상위 루트 디렉토리
+            
+        self.config_path = os.path.join(base_dir, 'config.ini')
+        
         self.config = configparser.ConfigParser()
         self.init_ui()
         self.load_settings()
@@ -21,16 +29,10 @@ class ACSettingsDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
 
-        # ---------------------------------------------------------
-        # 1. 모드 전환 버튼 (신규 추가)
-        # ---------------------------------------------------------
         self.btn_mode_toggle = QPushButton()
         self.btn_mode_toggle.clicked.connect(self.toggle_mode)
         layout.addWidget(self.btn_mode_toggle)
         
-        # ---------------------------------------------------------
-        # 2. 에어컨 자동 제어 그룹 (기존)
-        # ---------------------------------------------------------
         group_auto = QGroupBox("에어컨(AC) 자동 제어 설정")
         auto_layout = QVBoxLayout()
         
@@ -48,19 +50,12 @@ class ACSettingsDialog(QDialog):
         group_auto.setLayout(auto_layout)
         layout.addWidget(group_auto)
 
-        # ---------------------------------------------------------
-        # 💡 통합 저장 버튼 (에어컨 + 환기팬 일괄 저장)
-        # ---------------------------------------------------------
         btn_save = QPushButton("💾 설정 통합 저장")
         btn_save.setStyleSheet("font-weight: bold; background-color: #4CAF50; color: white; padding: 10px; margin-top: 5px;")
         btn_save.clicked.connect(self.save_settings)
         layout.addWidget(btn_save)
 
-        # ---------------------------------------------------------
-        # 3. 수동 제어 그룹 (기존)
-        # ---------------------------------------------------------
-        self.group_manual = QGroupBox("에어컨 수동 원격 제어 (즉시 동작)")
-        # 🌟 가로(QHBoxLayout)가 아닌 세로(QVBoxLayout)로 변경하여 층층이 쌓이게 합니다.
+        self.group_manual = QGroupBox("에어컨 수동 원격 제er (즉시 동작)")
         manual_layout = QVBoxLayout() 
 
         row1_layout = QHBoxLayout()
@@ -89,7 +84,6 @@ class ACSettingsDialog(QDialog):
         btn_off_all.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px; font-weight: bold;")
         btn_off_all.clicked.connect(lambda: self.trigger_manual("OFF_ALL"))
         
-        # 🌟 개별 버튼 대신, 버튼이 담긴 row(가로줄) 전체를 순서대로 화면에 넣습니다.
         manual_layout.addLayout(row1_layout)
         manual_layout.addLayout(row2_layout)
         manual_layout.addWidget(btn_off_all)
@@ -106,35 +100,26 @@ class ACSettingsDialog(QDialog):
         row.addWidget(widget)
         layout.addLayout(row)
 
-    # ---------------------------------------------------------
-    # 💡 신규 로직: 자동/수동 상태 토글 및 UI 갱신
-    # ---------------------------------------------------------
     def toggle_mode(self):
         ac_manager.is_auto = not ac_manager.is_auto
         self.update_mode_ui()
 
     def update_mode_ui(self):
-        """현재 is_auto 상태에 맞게 버튼 색상과 수동 조작 영역 활성화 여부를 바꿉니다."""
         if ac_manager.is_auto:
             self.btn_mode_toggle.setText("현재 모드: 🔄 자동 (수동 조작하려면 여기를 클릭)")
             self.btn_mode_toggle.setStyleSheet("background-color: #2ecc71; color: white; padding: 10px; font-weight: bold;")
-            self.group_manual.setEnabled(False) # 수동 버튼들 클릭 잠금
+            self.group_manual.setEnabled(False)
         else:
             self.btn_mode_toggle.setText("현재 모드: ✋ 수동 (자동으로 복귀하려면 여기를 클릭)")
             self.btn_mode_toggle.setStyleSheet("background-color: #e67e22; color: white; padding: 10px; font-weight: bold;")
-            self.group_manual.setEnabled(True)  # 수동 버튼들 클릭 잠금 해제
+            self.group_manual.setEnabled(True)
 
-    # ---------------------------------------------------------
-    # 💡 안전 장치: 창을 열거나 닫을 때 무조건 '자동 모드'로 안전 복귀
-    # ---------------------------------------------------------
     def showEvent(self, event):
-        """창이 열릴 때는 기본적으로 자동 모드를 유지합니다."""
         ac_manager.is_auto = True
         self.update_mode_ui()
         super().showEvent(event)
 
     def closeEvent(self, event):
-        """창을 닫고 나갈 때는 수동으로 놔두었더라도 안전을 위해 무조건 자동으로 복귀시킵니다."""
         ac_manager.is_auto = True
         super().closeEvent(event)
 
@@ -147,18 +132,33 @@ class ACSettingsDialog(QDialog):
         super().reject()
 
     def load_settings(self):
+        """config.ini 파일에서 설정값을 불러오고, 없으면 기본값을 세팅합니다."""
+        # 1. 기본값 정의 (요청하신 초기값 적용)
+        start1 = 32.0
+        start2 = 33.0
+        stop_temp = 29.0
+        cold_temp = 25.0
+        max_hours = 3.0
+
         if os.path.exists(self.config_path):
             self.config.read(self.config_path, encoding='utf-8')
             if 'AC_SETTINGS' in self.config:
-                self.spin_start1.setValue(self.config['AC_SETTINGS'].getfloat('START_TEMP_1', 28.5))
-                self.spin_start2.setValue(self.config['AC_SETTINGS'].getfloat('START_TEMP_2', 31.0))
-                self.spin_stop.setValue(self.config['AC_SETTINGS'].getfloat('STOP_TEMP', 27.5))
-                self.spin_cold.setValue(self.config['AC_SETTINGS'].getfloat('COLD_WIND_TEMP', 26.0))
-                self.spin_hours.setValue(self.config['AC_SETTINGS'].getfloat('MAX_RUN_HOURS', 3.0))
-            
+                sec = self.config['AC_SETTINGS']
+                # 🌟 대소문자 양쪽 모두 대응할 수 있도록 안전하게 getfloat 사용 (기본값 설정 포함)
+                start1 = sec.getfloat('START_TEMP_1', sec.getfloat('start_temp_1', 32.0))
+                start2 = sec.getfloat('START_TEMP_2', sec.getfloat('start_temp_2', 33.0))
+                stop_temp = sec.getfloat('STOP_TEMP', sec.getfloat('stop_temp', 29.0))
+                cold_temp = sec.getfloat('COLD_WIND_TEMP', sec.getfloat('cold_wind_temp', 25.0))
+                max_hours = sec.getfloat('MAX_RUN_HOURS', sec.getfloat('max_run_hours', 3.0))
+
+        # 2. 스핀박스에 최종 값 반영
+        self.spin_start1.setValue(start1)
+        self.spin_start2.setValue(start2)
+        self.spin_stop.setValue(stop_temp)
+        self.spin_cold.setValue(cold_temp)
+        self.spin_hours.setValue(max_hours)
             
     def save_settings(self):
-        # 1. 에어콘 제어 온도 유효성 검사
         if not (self.spin_stop.value() < self.spin_start1.value() < self.spin_start2.value()):
             QMessageBox.warning(
                 self, 
@@ -167,7 +167,6 @@ class ACSettingsDialog(QDialog):
             )
             return
 
-        # 2. Config 저장 (다음 실행 시 값을 기억하기 위함)
         if 'AC_SETTINGS' not in self.config:
             self.config['AC_SETTINGS'] = {}
         self.config['AC_SETTINGS']['START_TEMP_1'] = str(self.spin_start1.value())
@@ -179,7 +178,6 @@ class ACSettingsDialog(QDialog):
         with open(self.config_path, 'w', encoding='utf-8') as f:
             self.config.write(f)
         
-        # 3. 에어컨 매니저 자동 업데이트
         ac_manager.load_settings()
 
         QMessageBox.information(
@@ -187,7 +185,7 @@ class ACSettingsDialog(QDialog):
             "저장 완료", 
             "에어컨 타이머 설정이 파이썬에 반영되었습니다."
         )
-        self.accept() # 완료 후 자동으로 창을 닫아줍니다.
+        self.accept()
 
     def trigger_manual(self, action):
         ac_manager.force_manual_control(action)  

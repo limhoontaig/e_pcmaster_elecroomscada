@@ -13,10 +13,10 @@ class ACController:
         self.config = configparser.ConfigParser()
         
         # ⚙️ 설정 기본값
-        self.TEMP_START_1 = 28.5
-        self.TEMP_START_2 = 31.0
-        self.TEMP_STOP = 27.5
-        self.TEMP_COLD = 26.0
+        self.TEMP_START_1 = 32.0
+        self.TEMP_START_2 = 33.0
+        self.TEMP_STOP = 29.5
+        self.TEMP_COLD = 25.0
         self.MAX_RUN_TIME = 3 * 3600  
         
         # ⚙️ 기기 정보 및 상태 변수
@@ -43,10 +43,10 @@ class ACController:
         if os.path.exists(self.config_path):
             self.config.read(self.config_path, encoding='utf-8')
             if 'AC_SETTINGS' in self.config:
-                self.TEMP_START_1 = self.config['AC_SETTINGS'].getfloat('START_TEMP_1', 28.5)
-                self.TEMP_START_2 = self.config['AC_SETTINGS'].getfloat('START_TEMP_2', 31.0)
-                self.TEMP_STOP = self.config['AC_SETTINGS'].getfloat('STOP_TEMP', 27.5)
-                self.TEMP_COLD = self.config['AC_SETTINGS'].getfloat('COLD_WIND_TEMP', 26.0)
+                self.TEMP_START_1 = self.config['AC_SETTINGS'].getfloat('START_TEMP_1', 32.0)
+                self.TEMP_START_2 = self.config['AC_SETTINGS'].getfloat('START_TEMP_2', 33.0)
+                self.TEMP_STOP = self.config['AC_SETTINGS'].getfloat('STOP_TEMP', 29.5)
+                self.TEMP_COLD = self.config['AC_SETTINGS'].getfloat('COLD_WIND_TEMP', 25.0)
                 self.MAX_RUN_TIME = self.config['AC_SETTINGS'].getfloat('MAX_RUN_HOURS', 3.0) * 3600
 
     def send_ir_task(self, ip_address, hex_code):

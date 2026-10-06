@@ -1,6 +1,7 @@
 # pcmaster_worker.py
 import time
 import os
+import sys
 import platform
 import struct
 import configparser
@@ -15,7 +16,6 @@ from src import event_manager
 from shared.db_manager import DATA_LABELS, get_db_raw_connection
 from src.ac_controller import ac_manager 
 
-# 🌟 [신규 추가] PC 수동 조작 이벤트 매핑 딕셔너리
 COMMAND_MAP = {
     100: "TR 냉각 자동(ON)/수동(OFF) 모드 전환",
     101: "TR 냉각 전체 수동 기동",
@@ -41,36 +41,34 @@ def safe_modbus_call(func, address, count=None, value=None, values=None, slave_i
             raise e
     return None
 
-# 🌟 [최종 수정] 실수(Real/Float) 형식으로 변환하는 함수
 def to_32bit(regs, idx):
-    """16비트 레지스터 2개를 32비트 실수(Float/Real)로 변환"""
-    # 워드 스왑(Word Swap) 방식을 유지하면서 'f' 기호를 사용하여 실수로 읽어냅니다.
     packed = struct.pack('>HH', regs[idx+1], regs[idx])
     return struct.unpack('>f', packed)[0]
 
 def to_64bit(regs, idx):
-    """16비트 레지스터 4개를 64비트 실수(Double)로 변환 (총사용량 등)"""
     packed = struct.pack('>HHHH', regs[idx+3], regs[idx+2], regs[idx+1], regs[idx])
     return struct.unpack('>d', packed)[0]
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.join(os.path.dirname(current_dir), 'config.ini') # config.ini 파일이 루트에 있음
+# 🌟 [변경] 공통 루트 config.ini 경로 설정
+if getattr(sys, 'frozen', False):
+    base_dir = os.path.dirname(sys.executable)
+else:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(current_dir) # src의 상위 루트 폴더
+
+config_path = os.path.join(base_dir, 'config.ini')
 
 def get_com_ports():
     config = configparser.ConfigParser()
-    
-    # 1. 윈도우 기본값 설정
     port_relay = 'COM3'
     port_plc = 'COM4'
 
-    # 2. 파일이 있으면 읽고, 에러가 나지 않도록 안전하게(fallback) 값을 가져옵니다.
     if os.path.exists(config_path):
         config.read(config_path, encoding='utf-8')
         if config.has_section('SETTINGS'):
             port_relay = config.get('SETTINGS', 'COM_PORT_RELAY', fallback=port_relay)
             port_plc = config.get('SETTINGS', 'COM_PORT_PLC', fallback=port_plc)
 
-    # 3. 맥(macOS) 환경이면 가상 포트로 강제 고정
     if platform.system() == 'Darwin':
         port_relay = '/tmp/vcom1'
         port_plc = '/tmp/vcom1'
@@ -111,30 +109,22 @@ else:
     
 def write_plc_bit(address, state):
     if client_plc and client_plc.is_socket_open():
-        # 기존 모드버스 주소 변환 및 전송 로직
         word = address // 10
         bit = address % 10
         real_modbus_address = (word * 16) + bit
         
         safe_modbus_call(client_plc.write_coil, address=real_modbus_address, value=state, slave_id=5)
-        # print(f"👉 [비트 제어] M{address:04d} (Modbus {real_modbus_address}번지)에 {state} 전송 완료")
         
-        # 🌟 [신규 추가] 조작 즉시 DB에 이벤트 로그로 박제
         if address in COMMAND_MAP:
             action_str = "ON(동작/켜짐)" if state else "OFF(정지/꺼짐)"
             msg = f"화면 수동 제어: {COMMAND_MAP[address]} -> {action_str}"
-            
-            # 분류를 'COMMAND'로 하고, 조작자(operator)를 'SCADA_PC'로 명시
             event_id = db_manager.log_event_start("COMMAND", f"M{address:04d}", msg, operator="SCADA_PC")
-            
-            # 명령 하달은 상태 유지가 아닌 '순간의 조작'이므로, 기록 즉시 마감하여 duration을 0으로 만듦
             if event_id:
                 db_manager.log_event_end(event_id, "COMMAND")
 
 def write_plc_register(address, value):
     if client_plc and client_plc.is_socket_open():
         safe_modbus_call(client_plc.write_register, address=address, value=int(value * 10), slave_id=5)
-        # print(f"🌡️ [워드 제어] D{address:04d} 번지에 설정값 {value} 전송 완료")
 
 def serial_receive_thread():
     global last_db_save_time, pending_ac_fan_values, pending_tr_fan_values, last_sent_vent_targets
@@ -166,31 +156,22 @@ def serial_receive_thread():
                 통신성공_여부 = False
                 수집데이터 = [0] * len(DATA_LABELS) 
                 
-                # =============================================================
-                # ⚡ [그룹 A] 전력 계전기 통신 (국번 6, 1, 2, 3)
-                # =============================================================
                 if client_relay.is_socket_open():
                     current_step = "계전기(국번 6) 데이터 읽기"
-                    # 🌟 변경: 4번지부터 32워드 -> 0번지부터 36워드로 변경 (이벤트 비트 4워드 포함)
                     res_kep = safe_modbus_call(client_relay.read_input_registers, address=0, count=36, slave_id=6)
                     if res_kep and not res_kep.isError():
                         통신성공_여부 = True
-                        
-                        # 🌟 이벤트 로그 처리 (앞의 4개 레지스터 전달)
                         event_manager.process_relay_events(6, res_kep.registers[0:4])
                         
-                        # 🌟 아날로그 데이터 파싱 (인덱스에 +4를 하여 기존 배열과 맞춤)
                         수집데이터[4] = to_32bit(res_kep.registers, 4) / 1000.0; 수집데이터[5] = to_32bit(res_kep.registers, 6) / 1000.0   
                         수집데이터[6] = to_32bit(res_kep.registers, 8) / 1000.0; 수집데이터[7] = to_32bit(res_kep.registers, 10) / 1000.0   
                         수집데이터[8] = to_32bit(res_kep.registers, 12) / 1000.0; 수집데이터[9] = to_32bit(res_kep.registers, 14) / 1000.0  
                         수집데이터[10] = to_32bit(res_kep.registers, 18);      수집데이터[11] = to_32bit(res_kep.registers, 20)           
                         수집데이터[12] = to_32bit(res_kep.registers, 22);      수집데이터[13] = to_32bit(res_kep.registers, 24)           
                         수집데이터[14] = to_32bit(res_kep.registers, 28) / 1000.0  
-                        # 총사용량
                         수집데이터[15] = to_32bit(res_kep.registers, 34) / 1000.0 
                         
                     current_step = "계전기 TR-1(국번 1) 데이터 읽기"
-                    # 🌟 변경: 4번지부터 38워드 -> 0번지부터 42워드로 변경
                     res_tr1 = safe_modbus_call(client_relay.read_input_registers, address=0, count=42, slave_id=1)
                     if res_tr1 and not res_tr1.isError():
                         통신성공_여부 = True
@@ -223,76 +204,58 @@ def serial_receive_thread():
                         수집데이터[44] = to_32bit(res_tr3.registers, 16); 수집데이터[45] = to_32bit(res_tr3.registers, 18); 수집데이터[46] = to_32bit(res_tr3.registers, 20)
                         수집데이터[47] = to_32bit(res_tr3.registers, 24) / 1000.0
                 
-                # =============================================================
-                # 🏭 [그룹 B] LS PLC 통신 (국번 5) - 새 메모리 맵 반영
-                # =============================================================
                 if client_plc.is_socket_open():
                     if not is_initial_sync_done:
                         current_step = "PLC 초기 상태(M100, M101) 읽기"
-                        # M0100의 Modbus 주소는 160번지입니다 ((10*16)+0)
                         res_init = safe_modbus_call(client_plc.read_coils, address=160, count=2, slave_id=5)
                         if res_init and not res_init.isError():
                             m100_state = res_init.bits[0]
                             m101_state = res_init.bits[1]
-                            # UI로 시그널 쏘기!
                             comm_signal.plc_initial_sync.emit(m100_state, m101_state)
                             is_initial_sync_done = True
-                            # print(f"🔄 초기 동기화 완료: M100(자동/수동)={m100_state}, M101(마스터)={m101_state}")
                     
                     if pending_tr_fan_values is not None:
                         current_step = "PLC(국번 5) 온도 설정값 쓰기 (D0900)"
                         safe_modbus_call(client_plc.write_registers, address=900, values=pending_tr_fan_values, slave_id=5)
-                        # print(f"✅ [워드 제어] D0900~0905 번지에 온도 설정값 {pending_tr_fan_values} 전송 완료")
                         pending_tr_fan_values = None                
                     
                     current_step = "PLC(국번 5) 상태 비트 읽기 (M0200~M0220)"
-                    
-                    # 🌟 M0200의 실제 Modbus 시작 번지는 320 ((20 * 16) + 0 = 320)
-                    # M0220(352번지)까지 포함하여 총 40 칸을 읽어옵니다.
                     res_coils = safe_modbus_call(client_plc.read_coils, address=320, count=40, slave_id=5)
                     
                     if res_coils and not res_coils.isError():
-                        clean_bits = [] # A~F가 제거된 순수한 0~9 비트만 담을 리스트
-                        
+                        clean_bits = []
                         for i, state in enumerate(res_coils.bits[:40]):
                             modbus_addr = 320 + i
-                            bit = modbus_addr % 16 # 현재 주소의 비트 자리수 (0~15)
-                            
-                            # 🌟 비트 자리가 9 이하인 경우(0~9)만 추출하고, 10~15(A~F)는 무시합니다.
+                            bit = modbus_addr % 16
                             if bit <= 9:
                                 clean_bits.append(state)
                         
-                        # 완성된 clean_bits는 우리가 설계한 순서(M0200...M0209, M0210...)와 정확히 일치합니다.
                         event_manager.process_plc_events(clean_bits)
                         comm_signal.plc_status_update.emit(clean_bits)
 
                     current_step = "PLC(국번 5) 하트비트(생존) 검사"
                     if 통신성공_여부 and len(clean_bits) > 25:
-                        current_hb = clean_bits[25] # M0225 하트비트 비트
+                        current_hb = clean_bits[25]
                         now_t = time.time()
-                        
-                        # 값이 0 -> 1 또는 1 -> 0으로 변했다면 정상 (시간 갱신)
                         if current_hb != last_plc_heartbeat_val:
                             last_plc_heartbeat_val = current_hb
                             last_plc_heartbeat_time = now_t
                         
-                        # 🌟 만약 5초 이상 값이 안 변했다면 PLC CPU가 멈춘(STOP) 것!
                         if now_t - last_plc_heartbeat_time > 5.0:
                             통신성공_여부 = False
-                            # print("⚠️ PLC 통신은 되나 래더(CPU)가 정지됨!")
                         
                     current_step = "PLC(국번 5) 센서 워드 읽기 (D0950)"
                     res_plc = safe_modbus_call(client_plc.read_holding_registers, address=950, count=7, slave_id=5)
                     if res_plc and not res_plc.isError():
                         통신성공_여부 = True
                         
-                        수집데이터[0]  = res_plc.registers[0] / 10.0    # D00950: 실내온도
-                        수집데이터[1]  = res_plc.registers[1] / 10.0    # D00951: 외기온도
-                        수집데이터[49] = res_plc.registers[2] / 10.0    # D00952: 에어콘01온도
-                        수집데이터[50] = res_plc.registers[3] / 10.0    # D00953: 에어콘02온도
-                        수집데이터[26] = res_plc.registers[4] / 10.0    # D00954: Tr1_Temp
-                        수집데이터[37] = res_plc.registers[5] / 10.0    # D00955: Tr2_Temp
-                        수집데이터[48] = res_plc.registers[6] / 10.0    # D00956: Tr3_Temp
+                        수집데이터[0]  = res_plc.registers[0] / 10.0
+                        수집데이터[1]  = res_plc.registers[1] / 10.0
+                        수집데이터[49] = res_plc.registers[2] / 10.0
+                        수집데이터[50] = res_plc.registers[3] / 10.0
+                        수집데이터[26] = res_plc.registers[4] / 10.0
+                        수집데이터[37] = res_plc.registers[5] / 10.0
+                        수집데이터[48] = res_plc.registers[6] / 10.0
 
                         ui_data_dict = {
                             'indoor_temp': 수집데이터[0],
@@ -337,7 +300,6 @@ def serial_receive_thread():
                             ]
                             if plc_vent_targets != last_sent_vent_targets:
                                 safe_modbus_call(client_plc.write_registers, address=906, values=plc_vent_targets, slave_id=5)
-                                # print(f"✅ [워드 제어] D0906~0909 번지에 환기 설정값 {plc_vent_targets} 전송 완료")
                                 last_sent_vent_targets = plc_vent_targets
                         
                         current_step = "PLC(국번 5) 1분 변압기 최대 온도 연산 및 쓰기 (D0980~D0982)"
@@ -365,21 +327,16 @@ def serial_receive_thread():
                         )
                         safe_modbus_call(client_plc.write_registers, address=957, values=[ac_manager.ac1_cmd, ac_manager.ac2_cmd], slave_id=5)
 
-                # =============================================================
-                # [6] DB 로깅 (58초마다 기록)
-                # =============================================================
-                current_step = "데이터베이스 로깅 및 시그널 전송"
                 try:
                     if 통신성공_여부:
                         comm_signal.status_changed.emit(True)
                     else:
                         comm_signal.status_changed.emit(False)
                 except RuntimeError:
-                    pass # 프로그램 종료 중 화면 객체가 사라졌을 때 발생하는 에러를 조용히 무시
+                    pass
                 
                 now_time = time.time()
                 if 통신성공_여부 and (now_time - last_db_save_time >= 59.5):
-                    # print(f"💾 [DB 기록] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -> {수집데이터}")
                     insert_raw_data(수집데이터)
                     last_db_save_time = now_time
 
@@ -395,7 +352,6 @@ def serial_receive_thread():
 
                 time.sleep(1)
     finally:
-        # print("통신 포트를 안전하게 닫습니다.")
         if client_relay: client_relay.close()
         if client_plc: client_plc.close()
 
