@@ -13,14 +13,14 @@ class TRFanSettingsDialog(QDialog):
         self.setWindowTitle("변압기 개별 환기팬 온도 설정")
         self.setFixedSize(350, 380)
 
-        # 🌟 [변경] 공통 루트 config.ini 경로 설정
         if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
+            base_dir = os.path.dirname(os.path.abspath(sys.executable))
         else:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            base_dir = os.path.dirname(current_dir)
+            current_file = os.path.abspath(__file__)     # .../src/tr_controller.py 또는 pcmaster_worker.py
+            src_dir = os.path.dirname(current_file)      # .../src
+            base_dir = os.path.dirname(src_dir)          # .../ (최상단 루트)
             
-        self.config_path = os.path.join(base_dir, 'config.ini')
+        config_path = os.path.join(base_dir, 'config.ini')
 
         self.config = configparser.ConfigParser()
         self.load_settings()

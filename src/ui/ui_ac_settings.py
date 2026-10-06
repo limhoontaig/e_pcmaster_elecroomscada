@@ -13,12 +13,17 @@ class ACSettingsDialog(QDialog):
         self.setWindowTitle("⚙️ 에어컨 및 환기팬 종합 제어 (관리자 전용)")
         self.setFixedSize(380, 450)
         
-        # 🌟 [변경] 컴파일 환경 및 소스 실행 환경에 따른 안전한 루트 config.ini 경로 설정
+        # 🌟 컴파일(exe) 환경과 소스 실행 환경에 따른 완벽한 최상단 루트 경로 설정
         if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
+            # 1. PyInstaller로 컴파일된 경우: 실행 파일(exe)이 있는 실제 루트 폴더
+            base_dir = os.path.dirname(os.path.abspath(sys.executable))
         else:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            base_dir = os.path.dirname(current_dir) # src의 상위 루트 디렉토리
+            # 2. 파이썬 소스로 실행 중인 경우: 
+            # 현재 파일 위치 (src/ui/ui_ac_settings.py) -> ui 폴더 -> src 폴더 -> 최상단 루트(2단계 부모)
+            current_file = os.path.abspath(__file__)
+            ui_dir = os.path.dirname(current_file)       # .../src/ui
+            src_dir = os.path.dirname(ui_dir)            # .../src
+            base_dir = os.path.dirname(src_dir)            # .../ (최상단 루트, config.ini가 있는 곳)
             
         self.config_path = os.path.join(base_dir, 'config.ini')
         

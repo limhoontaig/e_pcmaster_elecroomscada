@@ -49,13 +49,13 @@ def to_64bit(regs, idx):
     packed = struct.pack('>HHHH', regs[idx+3], regs[idx+2], regs[idx+1], regs[idx])
     return struct.unpack('>d', packed)[0]
 
-# 🌟 [변경] 공통 루트 config.ini 경로 설정
 if getattr(sys, 'frozen', False):
-    base_dir = os.path.dirname(sys.executable)
+    base_dir = os.path.dirname(os.path.abspath(sys.executable))
 else:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    base_dir = os.path.dirname(current_dir) # src의 상위 루트 폴더
-
+    current_file = os.path.abspath(__file__)     # .../src/tr_controller.py 또는 pcmaster_worker.py
+    src_dir = os.path.dirname(current_file)      # .../src
+    base_dir = os.path.dirname(src_dir)          # .../ (최상단 루트)
+    
 config_path = os.path.join(base_dir, 'config.ini')
 
 def get_com_ports():
