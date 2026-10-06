@@ -13,19 +13,11 @@ class ACSettingsDialog(QDialog):
         self.setWindowTitle("⚙️ 에어컨 및 환기팬 종합 제어 (관리자 전용)")
         self.setFixedSize(380, 450)
         
-        # 🌟 컴파일(exe) 환경과 소스 실행 환경에 따른 완벽한 최상단 루트 경로 설정
-        if getattr(sys, 'frozen', False):
-            # 1. PyInstaller로 컴파일된 경우: 실행 파일(exe)이 있는 실제 루트 폴더
-            base_dir = os.path.dirname(os.path.abspath(sys.executable))
-        else:
-            # 2. 파이썬 소스로 실행 중인 경우: 
-            # 현재 파일 위치 (src/ui/ui_ac_settings.py) -> ui 폴더 -> src 폴더 -> 최상단 루트(2단계 부모)
-            current_file = os.path.abspath(__file__)
-            ui_dir = os.path.dirname(current_file)       # .../src/ui
-            src_dir = os.path.dirname(ui_dir)            # .../src
-            base_dir = os.path.dirname(src_dir)            # .../ (최상단 루트, config.ini가 있는 곳)
-            
-        self.config_path = os.path.join(base_dir, 'config.ini')
+       # 🌟 권한 문제 없는 AppData 경로 적용
+        appdata_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'ElecRoomSCADA')
+        if not os.path.exists(appdata_dir):
+            os.makedirs(appdata_dir, exist_ok=True)
+        self.config_path = os.path.join(appdata_dir, 'config.ini')
         
         self.config = configparser.ConfigParser()
         self.init_ui()
@@ -180,8 +172,12 @@ class ACSettingsDialog(QDialog):
         self.config['AC_SETTINGS']['COLD_WIND_TEMP'] = str(self.spin_cold.value())
         self.config['AC_SETTINGS']['MAX_RUN_HOURS'] = str(self.spin_hours.value())
 
-        with open(self.config_path, 'w', encoding='utf-8') as f:
-            self.config.write(f)
+        try:
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                self.config.write(f)
+        except Exception as e:
+            QMessageBox.critical(self, "저장 실패", f"설정 파일을 저장하는 중 오류가 발생했습니다.\n{e}")
+            return
         
         ac_manager.load_settings()
 

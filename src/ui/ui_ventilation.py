@@ -12,19 +12,10 @@ class VentilationSettingsDialog(QDialog):
         self.setWindowTitle("💨 환기설비(급/배기) 외기 연동 스마트 제어 설정")
         self.setFixedSize(400, 480)
         
-        # 🌟 컴파일(exe) 환경과 소스 실행 환경에 따른 완벽한 최상단 루트 경로 설정
-        if getattr(sys, 'frozen', False):
-            # 1. PyInstaller로 컴파일된 경우: 실행 파일(exe)이 있는 실제 루트 폴더
-            base_dir = os.path.dirname(os.path.abspath(sys.executable))
-        else:
-            # 2. 파이썬 소스로 실행 중인 경우: 
-            # 현재 파일 위치 (src/ui/ui_ac_settings.py) -> ui 폴더 -> src 폴더 -> 최상단 루트(2단계 부모)
-            current_file = os.path.abspath(__file__)
-            ui_dir = os.path.dirname(current_file)       # .../src/ui
-            src_dir = os.path.dirname(ui_dir)            # .../src
-            base_dir = os.path.dirname(src_dir)            # .../ (최상단 루트, config.ini가 있는 곳)
-            
-        self.config_path = os.path.join(base_dir, 'config.ini')
+        appdata_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'ElecRoomSCADA')
+        if not os.path.exists(appdata_dir):
+            os.makedirs(appdata_dir, exist_ok=True)
+        self.config_path = os.path.join(appdata_dir, 'config.ini')
         
         self.config = configparser.ConfigParser()
         self.init_ui()

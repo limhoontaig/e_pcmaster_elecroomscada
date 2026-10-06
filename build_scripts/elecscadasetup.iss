@@ -27,7 +27,7 @@ Source: "E:\e_pcmaster_elecroomscada\dist\main\_internal\template_전기실_운�
 Source: "..\assets\free-icon-folder-2015058.ico"; DestDir: "{app}"
 
 ; 5. config.ini 파일 설치 폴더 루트({app})에 복사
-Source: "E:\e_pcmaster_elecroomscada\dist\main\_internal\config.ini"; DestDir: "{app}"; Flags: ignoreversion
+Source: "E:\e_pcmaster_elecroomscada\config.ini"; DestDir: "{userappdata}\ElecRoomSCADA"; Flags: onlyifdoesntexist
 
 [Icons]
 ; 바탕화면에 아이콘 생성 (WorkingDir 지정으로 설정 파일/템플릿 경로 안정성 확보)
