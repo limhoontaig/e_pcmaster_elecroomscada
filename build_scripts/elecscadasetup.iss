@@ -3,7 +3,7 @@
 
 [Setup]
 AppName=전기실SCADA
-AppVersion=0.0
+AppVersion=0.1
 ; AppId 절대 변경 금지
 AppId={{61aedec0-b550-40e2-8e2f-370abc090153} 
 DefaultDirName={autopf}\ElecRoomSCADA
