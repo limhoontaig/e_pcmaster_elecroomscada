@@ -54,19 +54,20 @@ class ACController:
 
     def send_ir_task(self, ip_address, hex_code):
         if self.SIMULATION_MODE:
-            print(f"   [시뮬레이션] {ip_address}로 IR 신호 전송 완료")
             self._log_individual_ac(ip_address, hex_code)
             return True
         try:
             device = broadlink.hello(ip_address)
+            if not device:
+                return False
             device.auth()
+            time.sleep(0.05)
             packet = bytes.fromhex(hex_code)
             device.send_data(packet)
-            print(f"[IR 발사 성공] 대상 IP: {ip_address}")
+            time.sleep(0.05)
             self._log_individual_ac(ip_address, hex_code)
             return True 
         except Exception as e:
-            print(f"[IR 발사 실패] ({ip_address}): {e}")
             return False
 
     def _log_individual_ac(self, ip_address, hex_code):

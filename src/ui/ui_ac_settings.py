@@ -50,10 +50,7 @@ class ACSettingsDialog(QDialog):
         btn_save.clicked.connect(self.save_settings)
         layout.addWidget(btn_save)
 
-        # 3. 🌟 [위치 변경됨] 모드 변경 버튼을 설정 저장 버튼 아래로 이동
-        self.btn_mode_toggle = QPushButton()
-        self.btn_mode_toggle.clicked.connect(self.toggle_mode)
-        layout.addWidget(self.btn_mode_toggle)
+       
 
         # 4. 에어컨 수동 원격 제어 그룹 박스
         self.group_manual = QGroupBox("에어컨 수동 원격 제어 (즉시 동작)")
@@ -91,6 +88,11 @@ class ACSettingsDialog(QDialog):
         
         self.group_manual.setLayout(manual_layout)
         layout.addWidget(self.group_manual)
+
+         # 3. 🌟 [위치 변경됨] 모드 변경 버튼을 설정 저장 버튼 아래로 이동
+        self.btn_mode_toggle = QPushButton()
+        self.btn_mode_toggle.clicked.connect(self.toggle_mode)
+        layout.addWidget(self.btn_mode_toggle)
         
         self.setLayout(layout)
         self.update_mode_ui()
