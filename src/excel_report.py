@@ -5,6 +5,7 @@ import os
 import zipfile
 import re
 from datetime import datetime, timedelta
+from PyQt5.QtWidgets import QMessageBox
 import openpyxl
 # db_manager에서 MariaDB 연결 함수 및 주요 상수를 가져옵니다.
 from shared.db_manager import (DATA_LABELS, METER_FIELDS, get_field_inspections_for_date,
@@ -36,9 +37,15 @@ else:
 
 def ensure_excel_template():
     if not os.path.exists(TEMPLATE_IN_APPDATA):
-        print(f"❌ 템플릿 파일을 찾을 수 없습니다: {TEMPLATE_IN_APPDATA}")
+        QMessageBox.warning(
+            None, 
+            "템플릿 파일 경고", 
+            f"❌ 템플릿 파일을 찾을 수 없습니다:\n{TEMPLATE_IN_APPDATA}"
+        )
+        #print(f"❌ 템플릿 파일을 찾을 수 없습니다: {TEMPLATE_IN_APPDATA}")
     else:
-        print(f"✅ 템플릿 파일을 찾았습니다: {TEMPLATE_IN_APPDATA}")
+        pass
+        #print(f"✅ 템플릿 파일을 찾았습니다: {TEMPLATE_IN_APPDATA}")
 
 # 프로그램 시작 시점에 체크
 ensure_excel_template()
@@ -70,7 +77,7 @@ def clean_external_links_physically(file_path):
         os.rename(temp_file_path, file_path)
     except Exception as e:
         if os.path.exists(temp_file_path): os.remove(temp_file_path)
-        print(f"[경고] 외부 링크 물리 청소 중 예외 발생: {e}")
+        # print(f"[경고] 외부 링크 물리 청소 중 예외 발생: {e}")
 
 def generate_excel_report(selected_date, target_dir=None):
     """
@@ -250,7 +257,7 @@ def generate_excel_report(selected_date, target_dir=None):
                         cell.value = inspection_data[1]["name"] if inspection_data[1]["name"] else "-"
                     elif "1차" in cell_text and "시간" in cell_text:
                         cell.value = inspection_data[1]["time"] if inspection_data[1]["time"] else "-"
-                        print(f"time", inspection_data[1]["time"])
+                        # print(f"time", inspection_data[1]["time"])
                     elif "2차" in cell_text and "점검자" in cell_text:
                         cell.value = inspection_data[2]["name"] if inspection_data[2]["name"] else "-"
                     elif "2차" in cell_text and "시간" in cell_text:
@@ -260,7 +267,12 @@ def generate_excel_report(selected_date, target_dir=None):
                     elif "3차" in cell_text and "시간" in cell_text:
                         cell.value = inspection_data[3]["time"] if inspection_data[3]["time"] else "-"
     except Exception as e:
-        print(f"[ERROR] 현장 점검 서식 매핑 중 오류 발생: {e}")
+        QMessageBox.warning(
+            None, 
+            "엑셀 매핑중 오류 발생", 
+            f"[ERROR] 현장 점검 서식 매핑 중 오류 발생: {e}"
+        )
+        # print(f"[ERROR] 현장 점검 서식 매핑 중 오류 발생: {e}")
 
     # =========================================================================
     # [파트 4] 상세내역 시트 - 24시간 시간별 데이터 주입 
@@ -325,7 +337,7 @@ def generate_excel_report(selected_date, target_dir=None):
     wb.save(output_file)
     
     clean_external_links_physically(output_file)
-    print(f"✅ [출력 성공] 구역별 매핑 완료: {output_file}")
+    # print(f"✅ [출력 성공] 구역별 매핑 완료: {output_file}")
 
 if __name__ == "__main__":
     generate_excel_report("2026-06-23")

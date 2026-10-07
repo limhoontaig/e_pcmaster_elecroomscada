@@ -342,7 +342,7 @@ def serial_receive_thread():
                 time.sleep(0.1)
 
             except Exception as e:
-                print(f"❌ [에러 발생 구간: {current_step}] -> 상세 내용: {e}")
+                # print(f"❌ [에러 발생 구간: {current_step}] -> 상세 내용: {e}")
                 if client_relay: client_relay.close()
                 if client_plc: client_plc.close()
 
