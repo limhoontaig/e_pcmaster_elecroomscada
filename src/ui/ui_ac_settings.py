@@ -11,7 +11,7 @@ class ACSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("⚙️ 에어컨 및 환기팬 종합 제어 (관리자 전용)")
-        self.setFixedSize(380, 450)
+        self.setFixedSize(380, 480) # 버튼 위치 이동에 따른 세로 크기 미세 조정
         
        # 🌟 권한 문제 없는 AppData 경로 적용
         appdata_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'ElecRoomSCADA')
@@ -25,11 +25,8 @@ class ACSettingsDialog(QDialog):
 
     def init_ui(self):
         layout = QVBoxLayout()
-
-        self.btn_mode_toggle = QPushButton()
-        self.btn_mode_toggle.clicked.connect(self.toggle_mode)
-        layout.addWidget(self.btn_mode_toggle)
         
+        # 1. 에어컨 자동 제어 설정 그룹 박스
         group_auto = QGroupBox("에어컨(AC) 자동 제어 설정")
         auto_layout = QVBoxLayout()
         
@@ -47,12 +44,19 @@ class ACSettingsDialog(QDialog):
         group_auto.setLayout(auto_layout)
         layout.addWidget(group_auto)
 
+        # 2. 설정 통합 저장 버튼
         btn_save = QPushButton("💾 설정 통합 저장")
         btn_save.setStyleSheet("font-weight: bold; background-color: #4CAF50; color: white; padding: 10px; margin-top: 5px;")
         btn_save.clicked.connect(self.save_settings)
         layout.addWidget(btn_save)
 
-        self.group_manual = QGroupBox("에어컨 수동 원격 제er (즉시 동작)")
+        # 3. 🌟 [위치 변경됨] 모드 변경 버튼을 설정 저장 버튼 아래로 이동
+        self.btn_mode_toggle = QPushButton()
+        self.btn_mode_toggle.clicked.connect(self.toggle_mode)
+        layout.addWidget(self.btn_mode_toggle)
+
+        # 4. 에어컨 수동 원격 제어 그룹 박스
+        self.group_manual = QGroupBox("에어컨 수동 원격 제어 (즉시 동작)")
         manual_layout = QVBoxLayout() 
 
         row1_layout = QHBoxLayout()
@@ -130,7 +134,6 @@ class ACSettingsDialog(QDialog):
 
     def load_settings(self):
         """config.ini 파일에서 설정값을 불러오고, 없으면 기본값을 세팅합니다."""
-        # 1. 기본값 정의 (요청하신 초기값 적용)
         start1 = 32.0
         start2 = 33.0
         stop_temp = 29.0
@@ -141,14 +144,12 @@ class ACSettingsDialog(QDialog):
             self.config.read(self.config_path, encoding='utf-8')
             if 'AC_SETTINGS' in self.config:
                 sec = self.config['AC_SETTINGS']
-                # 🌟 대소문자 양쪽 모두 대응할 수 있도록 안전하게 getfloat 사용 (기본값 설정 포함)
                 start1 = sec.getfloat('START_TEMP_1', sec.getfloat('start_temp_1', 32.0))
                 start2 = sec.getfloat('START_TEMP_2', sec.getfloat('start_temp_2', 33.0))
                 stop_temp = sec.getfloat('STOP_TEMP', sec.getfloat('stop_temp', 29.0))
                 cold_temp = sec.getfloat('COLD_WIND_TEMP', sec.getfloat('cold_wind_temp', 25.0))
                 max_hours = sec.getfloat('MAX_RUN_HOURS', sec.getfloat('max_run_hours', 3.0))
 
-        # 2. 스핀박스에 최종 값 반영
         self.spin_start1.setValue(start1)
         self.spin_start2.setValue(start2)
         self.spin_stop.setValue(stop_temp)

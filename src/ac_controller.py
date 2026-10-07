@@ -9,7 +9,10 @@ from shared import db_manager
 
 class ACController:
     def __init__(self):
-        self.config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
+        appdata_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'ElecRoomSCADA')
+        if not os.path.exists(appdata_dir):
+            os.makedirs(appdata_dir, exist_ok=True)
+        self.config_path = os.path.join(appdata_dir, 'config.ini')
         self.config = configparser.ConfigParser()
         
         # ⚙️ 설정 기본값
