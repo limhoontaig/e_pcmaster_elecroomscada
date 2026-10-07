@@ -150,10 +150,10 @@ class ACController:
 
         if self.ac_state == "STANDBY":
             if (indoor_temp >= self.TEMP_START_1) or (is_heavy_load and indoor_temp >= 27.0):
-                if indoor_temp >= self.TEMP_START_1:
-                    print(f"\n[일반 기동] 실내 온도 {indoor_temp:.1f}C 도달. 선행 {self.lead_ac}호기 가동!")
-                else:
-                    print(f"\n[예측 기동 발동] 외기:{outdoor_temp:.1f}C, 부하:{total_load}kW (실내:{indoor_temp:.1f}C). 선행 {self.lead_ac}호기 가동!")
+                # if indoor_temp >= self.TEMP_START_1:
+                #     print(f"\n[일반 기동] 실내 온도 {indoor_temp:.1f}C 도달. 선행 {self.lead_ac}호기 가동!")
+                # else:
+                #     print(f"\n[예측 기동 발동] 외기:{outdoor_temp:.1f}C, 부하:{total_load}kW (실내:{indoor_temp:.1f}C). 선행 {self.lead_ac}호기 가동!")
                 threading.Thread(target=self.send_ir_task, args=(hubs[self.lead_ac], self.IR_TURN_ON_29C)).start()
                 self.ac_state = "STARTING_1"
                 self.ac_start_time = current_time
