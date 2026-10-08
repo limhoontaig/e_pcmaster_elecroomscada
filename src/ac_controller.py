@@ -74,9 +74,9 @@ class ACController:
         ac_num = 1 if ip_address == self.HUB1_IP else 2
         if hex_code == self.IR_TURN_ON_29C:
             if ac_num == 1 and not getattr(self, 'ac1_event_id', None):
-                self.ac1_event_id = db_manager.log_event_start("OPERATION", "에어컨 1호기", "1호기 냉방 가동", operator="SCADA_PC")
+                self.ac1_event_id = db_manager.log_event_start("OPERATION", "aircon01_operation", "1호기 냉방 가동", operator="SYSTEM")
             elif ac_num == 2 and not getattr(self, 'ac2_event_id', None):
-                self.ac2_event_id = db_manager.log_event_start("OPERATION", "에어컨 2호기", "2호기 냉방 가동", operator="SCADA_PC")
+                self.ac2_event_id = db_manager.log_event_start("OPERATION", "aircon02_operation", "2호기 냉방 가동", operator="SYSTEM")
         elif hex_code == self.IR_TURN_OFF:
             if ac_num == 1 and getattr(self, 'ac1_event_id', None):
                 db_manager.log_event_end(self.ac1_event_id, "OPERATION")
