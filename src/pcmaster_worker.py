@@ -98,6 +98,7 @@ tr2_buffer = []
 tr3_buffer = []
 last_max_calc_time = 0
 is_first_tr_send = True
+last_hb_send_time = 0
 
 client_relay = ModbusSerialClient(port=COM_PORT_RELAY, baudrate=BAUD_RATE, timeout=0.3, stopbits=1, bytesize=8, parity='N')
 
@@ -204,6 +205,11 @@ def serial_receive_thread():
                         수집데이터[47] = to_32bit(res_tr3.registers, 24) / 1000.0
                 
                 if client_plc.is_socket_open():
+                    global last_hb_send_time
+                    now_t = time.time()
+                    if now_t - last_hb_send_time >= 2.0:
+                        safe_modbus_call(client_plc.write_register, address=6531, value=1, slave_id=5)
+                        last_hb_send_time = now_t
                     if not is_initial_sync_done:
                         current_step = "PLC 초기 상태(M100, M101) 읽기"
                         res_init = safe_modbus_call(client_plc.read_coils, address=160, count=2, slave_id=5)
