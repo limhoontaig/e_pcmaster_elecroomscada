@@ -262,23 +262,6 @@ def serial_receive_thread():
                         수집데이터[37] = res_plc.registers[5] / 10.0
                         수집데이터[48] = res_plc.registers[6] / 10.0
 
-                        ui_data_dict = {
-                            'indoor_temp': 수집데이터[0],
-                            'outdoor_temp': 수집데이터[1],
-                            'Tr1_Temp': 수집데이터[26],
-                            'Tr2_Temp': 수집데이터[37],
-                            'Tr3_Temp': 수집데이터[48],
-                            'Tr1_V_R_S': 수집데이터[22],
-                            'Tr1_A_R': 수집데이터[16],
-                            'Tr1_P_kW': 수집데이터[25],
-                            'Tr2_V_R_S': 수집데이터[33],
-                            'Tr2_A_R': 수집데이터[27],
-                            'Tr2_P_kW': 수집데이터[36],
-                            'Tr3_V_R_S': 수집데이터[44],
-                            'Tr3_A_R': 수집데이터[38],
-                            'Tr3_P_kW': 수집데이터[47],
-                        }
-                        comm_signal.plc_data_update.emit(ui_data_dict)
 
                         current_step = "PLC(국번 5) 스마트 환기 제어 판별 및 쓰기"
                         if vent_settings is not None:
@@ -309,17 +292,47 @@ def serial_receive_thread():
                         
                         current_step = "PLC(국번 5) 1분 변압기 최대 온도 연산 및 쓰기 (D0980~D0982)"
                         now_t = time.time()
+                        max_tr1 = res_plc.registers[4]
+                        max_tr2 = res_plc.registers[5]
+                        max_tr3 = res_plc.registers[6]
                         tr1_buffer.append(res_plc.registers[4]) 
                         tr2_buffer.append(res_plc.registers[5])
                         tr3_buffer.append(res_plc.registers[6])
 
                         if is_first_tr_send or (now_t - last_max_calc_time >= 60.0):
-                            if tr1_buffer:
+                            if is_first_tr_send:
+                                # 🌟 프로그램 켜고 처음 진입 시 현재 온도값을 PLC(D0980~D0982)로 즉시 전송
+                                safe_modbus_call(client_plc.write_registers, address=980, values=[max_tr1, max_tr2, max_tr3], slave_id=5)
+                            elif tr1_buffer:
+                                # 60주기마다 도달했을 때는 1분간의 최고값 계산 후 전송
                                 max_tr1 = max(tr1_buffer); max_tr2 = max(tr2_buffer); max_tr3 = max(tr3_buffer)
                                 safe_modbus_call(client_plc.write_registers, address=980, values=[max_tr1, max_tr2, max_tr3], slave_id=5)
+                                
                             tr1_buffer.clear(); tr2_buffer.clear(); tr3_buffer.clear()
                             last_max_calc_time = now_t
                             is_first_tr_send = False
+
+                        ui_data_dict = {
+                            'indoor_temp': 수집데이터[0],
+                            'outdoor_temp': 수집데이터[1],
+                            'total_kw': 수집데이터[14],
+                            'Tr1_Temp': 수집데이터[26],
+                            'Tr2_Temp': 수집데이터[37],
+                            'Tr3_Temp': 수집데이터[48],
+                            'Tr1_max_temp': max_tr1/10.0,
+                            'Tr2_max_temp': max_tr2/10.0,
+                            'Tr3_max_temp': max_tr3/10.0,
+                            'Tr1_V_R_S': 수집데이터[22],
+                            'Tr1_A_R': 수집데이터[16],
+                            'Tr1_P_kW': 수집데이터[25],
+                            'Tr2_V_R_S': 수집데이터[33],
+                            'Tr2_A_R': 수집데이터[27],
+                            'Tr2_P_kW': 수집데이터[36],
+                            'Tr3_V_R_S': 수집데이터[44],
+                            'Tr3_A_R': 수집데이터[38],
+                            'Tr3_P_kW': 수집데이터[47],
+                        }
+                        comm_signal.plc_data_update.emit(ui_data_dict)
                     
                     current_step = "PLC(국번 5) 에어컨 컨트롤러 로직 쓰기 (D957,D958)"
                     if 통신성공_여부:

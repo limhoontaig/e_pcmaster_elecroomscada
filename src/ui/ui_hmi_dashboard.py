@@ -165,19 +165,18 @@ class HMIDashboardWidget(QWidget):
         grid.setSpacing(2)
         grid.setContentsMargins(5, 5, 5, 5)
 
-        headers = ["설비 구분", "운전 전압 (V)", "운전 전류 (A)", "운전 전력 (kW)", "부하율 (%)", "운전 온도 (℃)"]
+        headers = ["설비 구분", "운전 전압 (V)", "운전 전류 (A)", "TR별 부하 (kW)", "부하율 (%)", "총 부하( kW )", "운전 온도 (℃)", "1분 최대온도 (℃)"]
         for col, h_text in enumerate(headers):
             lbl = QLabel(h_text); lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet("background-color: #222; font-weight: bold; padding: 5px; border: 1px solid #555;")
             grid.addWidget(lbl, 0, col)
 
         self.data_labels = {}
-        # DB 컬럼 명명 규칙에 맞게 접두어(Tr1, Tr2, Tr3) 추가
         rows_config = [("TR-1 (1,000kVA)", "1", "Tr1"), ("TR-2 (1,250kVA)", "2", "Tr2"), ("TR-3 (1,250kVA)", "3", "Tr3")]
-        keys = ["v", "a", "kw", "load", "temp"]
-        # 통신/DB 데이터 딕셔너리의 실제 키 이름 (전압은 선간전압 V_R_S를 표시한다고 가정)
-        db_keys = ["V_R_S", "A_R", "P_kW", "load", "Temp"] 
-        colors = ["#3498db", "#f1c40f", "#e67e22", "#e74c3c", "#2ecc71"]
+        
+        keys = ["v", "a", "kw", "load", "temp", "max_temp"]
+        db_keys = ["V_R_S", "A_R", "P_kW", "load", "Temp", "max_temp"] 
+        colors = ["#3498db", "#f1c40f", "#e67e22", "#e74c3c", "#2ecc71", "#e74c3c"]
 
         for row_idx, (tr_name, tr_num, db_prefix) in enumerate(rows_config, start=1):
             r_lbl = QLabel(tr_name)
@@ -185,13 +184,30 @@ class HMIDashboardWidget(QWidget):
             r_lbl.setStyleSheet("background-color: #1a1a1a; font-weight: bold; padding: 5px; border: 1px solid #444;")
             grid.addWidget(r_lbl, row_idx, 0)
             
-            for col_idx, (key, db_key) in enumerate(zip(keys, db_keys)):
+            # 전압, 전류, 전력, 부하율 컬럼 배치
+            for col_idx in range(4):
+                key = keys[col_idx]
+                db_key = db_keys[col_idx]
                 color = colors[col_idx]
-                # 부하율(load)은 DB 컬럼에 없으므로 기존 방식 유지, 나머지는 DB 키 방식 적용
                 label_key = f"{db_prefix}_{db_key}" if key != "load" else f"tr{tr_num}_load"
                 lcd = self.create_lcd_label("0.0", color)
                 self.data_labels[label_key] = lcd
                 grid.addWidget(lcd, row_idx, col_idx + 1)
+
+            # 🌟 운전전력 총합계 (TR-1 행 위치에 3개 행 병합으로 배치, 데이터 키는 'total_kw')
+            if row_idx == 1:
+                total_lcd = self.create_lcd_label("0.0", "#f39c12")
+                self.data_labels["total_kw"] = total_lcd
+                grid.addWidget(total_lcd, 1, 5, 3, 1)
+
+            # 운전 온도 및 1분간 최대온도 배치
+            temp_lcd = self.create_lcd_label("0.0", "#2ecc71")
+            self.data_labels[f"{db_prefix}_Temp"] = temp_lcd
+            grid.addWidget(temp_lcd, row_idx, 6)
+
+            max_temp_lcd = self.create_lcd_label("0.0", "#e74c3c")
+            self.data_labels[f"{db_prefix}_max_temp"] = max_temp_lcd
+            grid.addWidget(max_temp_lcd, row_idx, 7)
 
         main_layout.addWidget(data_frame, 1)
         # 🌟 [신규 추가] 워커에서 쏜 시그널을 내 함수(sync_ui_from_plc)와 연결 (init_ui 맨 마지막 줄에 추가)
@@ -639,42 +655,25 @@ class HMIDashboardWidget(QWidget):
                 lbl.setStyleSheet(f"background-color: {'#3498db' if is_running else '#555'}; color: white; padding: 5px; font-weight: bold;")
 
     def update_plc_data(self, data):
-        # 대소문자 구분 없이 라벨을 찾기 위한 딕셔너리
         lower_labels = {k.lower(): v for k, v in self.data_labels.items()}
         
-        # 1. 기존 데이터 (전압, 전류, 전력, 온도 등) 일괄 갱신
+        # 데이터 일괄 갱신 (total_kw, 각 변압기 최대 온도 등 자동 매핑)
         for key, value in data.items():
             lower_key = key.lower()
-            
             if lower_key in lower_labels:
                 formatted_value = f"{value:.1f}" if isinstance(value, float) else str(value)
                 lower_labels[lower_key].setText(formatted_value)
                 
-        # ----------------------------------------------------------------------
-        # 2. 🌟 각 변압기 용량에 따른 부하율(%) 별도 계산 및 화면 갱신 추가
-        # ----------------------------------------------------------------------
+        # 각 변압기 용량별 부하율(%) 계산 및 갱신
         try:
-            # TR-1 (용량: 1,000kVA) - (현재전력 / 1000) * 100
             if 'Tr1_P_kW' in data and 'tr1_load' in lower_labels:
-                tr1_kw = float(data['Tr1_P_kW'])
-                tr1_load = (tr1_kw / 1000.0) * 100.0
-                lower_labels['tr1_load'].setText(f"{tr1_load:.1f}")
-                
-            # TR-2 (용량: 1,250kVA) - (현재전력 / 1250) * 100
+                lower_labels['tr1_load'].setText(f"{(float(data['Tr1_P_kW']) / 1000.0) * 100.0:.1f}")
             if 'Tr2_P_kW' in data and 'tr2_load' in lower_labels:
-                tr2_kw = float(data['Tr2_P_kW'])
-                tr2_load = (tr2_kw / 1250.0) * 100.0
-                lower_labels['tr2_load'].setText(f"{tr2_load:.1f}")
-                
-            # TR-3 (용량: 1,250kVA) - (현재전력 / 1250) * 100
+                lower_labels['tr2_load'].setText(f"{(float(data['Tr2_P_kW']) / 1250.0) * 100.0:.1f}")
             if 'Tr3_P_kW' in data and 'tr3_load' in lower_labels:
-                tr3_kw = float(data['Tr3_P_kW'])
-                tr3_load = (tr3_kw / 1250.0) * 100.0
-                lower_labels['tr3_load'].setText(f"{tr3_load:.1f}")
-                
-        except Exception as e:
+                lower_labels['tr3_load'].setText(f"{(float(data['Tr3_P_kW']) / 1250.0) * 100.0:.1f}")
+        except Exception:
             pass
-            # print(f"부하율 계산 오류: {e}")
 
         # ======================================================================
         # 🌟 [추가] 3. 환기설비 SF(외기온도) / EF(실내온도) 라벨 실시간 갱신
