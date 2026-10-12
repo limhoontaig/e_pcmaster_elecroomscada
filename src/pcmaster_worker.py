@@ -100,6 +100,10 @@ last_max_calc_time = 0
 is_first_tr_send = True
 last_hb_send_time = 0
 
+saved_max_tr1 = 0
+saved_max_tr2 = 0
+saved_max_tr3 = 0
+
 client_relay = ModbusSerialClient(port=COM_PORT_RELAY, baudrate=BAUD_RATE, timeout=0.3, stopbits=1, bytesize=8, parity='N')
 
 if COM_PORT_RELAY == COM_PORT_PLC:
@@ -292,21 +296,28 @@ def serial_receive_thread():
                         
                         current_step = "PLC(국번 5) 1분 변압기 최대 온도 연산 및 쓰기 (D0980~D0982)"
                         now_t = time.time()
-                        max_tr1 = res_plc.registers[4]
-                        max_tr2 = res_plc.registers[5]
-                        max_tr3 = res_plc.registers[6]
-                        tr1_buffer.append(res_plc.registers[4]) 
-                        tr2_buffer.append(res_plc.registers[5])
-                        tr3_buffer.append(res_plc.registers[6])
+                        global saved_max_tr1, saved_max_tr2, saved_max_tr3
+                        current_tr1 = res_plc.registers[4]
+                        current_tr2 = res_plc.registers[5]
+                        current_tr3 = res_plc.registers[6]
+                        
+                        tr1_buffer.append(current_tr1) 
+                        tr2_buffer.append(current_tr2)
+                        tr3_buffer.append(current_tr3)
 
                         if is_first_tr_send or (now_t - last_max_calc_time >= 120.0):
                             if is_first_tr_send:
-                                # 🌟 프로그램 켜고 처음 진입 시 현재 온도값을 PLC(D0980~D0982)로 즉시 전송
-                                safe_modbus_call(client_plc.write_registers, address=980, values=[max_tr1, max_tr2, max_tr3], slave_id=5)
+                                # 🌟 프로그램 켜고 처음 진입 시 현재 온도값을 PLC 및 저장 변수에 반영
+                                saved_max_tr1 = current_tr1
+                                saved_max_tr2 = current_tr2
+                                saved_max_tr3 = current_tr3
+                                safe_modbus_call(client_plc.write_registers, address=980, values=[saved_max_tr1, saved_max_tr2, saved_max_tr3], slave_id=5)
                             elif tr1_buffer:
-                                # 120주기마다 도달했을 때는 2분간의 최고값 계산 후 전송
-                                max_tr1 = max(tr1_buffer); max_tr2 = max(tr2_buffer); max_tr3 = max(tr3_buffer)
-                                safe_modbus_call(client_plc.write_registers, address=980, values=[max_tr1, max_tr2, max_tr3], slave_id=5)
+                                # 120초 주기에 도달했을 때 2분간의 최고값 계산 후 저장 및 전송
+                                saved_max_tr1 = max(tr1_buffer)
+                                saved_max_tr2 = max(tr2_buffer)
+                                saved_max_tr3 = max(tr3_buffer)
+                                safe_modbus_call(client_plc.write_registers, address=980, values=[saved_max_tr1, saved_max_tr2, saved_max_tr3], slave_id=5)
                                 
                             tr1_buffer.clear(); tr2_buffer.clear(); tr3_buffer.clear()
                             last_max_calc_time = now_t
@@ -319,9 +330,9 @@ def serial_receive_thread():
                             'Tr1_Temp': 수집데이터[26],
                             'Tr2_Temp': 수집데이터[37],
                             'Tr3_Temp': 수집데이터[48],
-                            'Tr1_max_temp': max_tr1/10.0,
-                            'Tr2_max_temp': max_tr2/10.0,
-                            'Tr3_max_temp': max_tr3/10.0,
+                            'Tr1_max_temp': saved_max_tr1/10.0,
+                            'Tr2_max_temp': saved_max_tr2/10.0,
+                            'Tr3_max_temp': saved_max_tr3/10.0,
                             'Tr1_V_R_S': 수집데이터[22],
                             'Tr1_A_R': 수집데이터[16],
                             'Tr1_P_kW': 수집데이터[25],
