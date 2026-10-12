@@ -326,14 +326,14 @@ def serial_receive_thread():
                         수집데이터[26] = saved_max_tr1 / 10.0
                         수집데이터[37] = saved_max_tr2 / 10.0
                         수집데이터[48] = saved_max_tr3 / 10.0
-                        
+
                         ui_data_dict = {
                             'indoor_temp': 수집데이터[0],
                             'outdoor_temp': 수집데이터[1],
                             'total_kw': 수집데이터[14],
-                            'Tr1_Temp': current_tr1, # 수집데이터[26],
-                            'Tr2_Temp': current_tr2, # 수집데이터[37],
-                            'Tr3_Temp': current_tr3, # 수집데이터[48],
+                            'Tr1_Temp': current_tr1 / 10.0, # 수집데이터[26],
+                            'Tr2_Temp': current_tr2 / 10.0, # 수집데이터[37],
+                            'Tr3_Temp': current_tr3 / 10.0, # 수집데이터[48],
                             'Tr1_max_temp': saved_max_tr1/10.0,
                             'Tr2_max_temp': saved_max_tr2/10.0,
                             'Tr3_max_temp': saved_max_tr3/10.0,
