@@ -210,8 +210,9 @@ class CleanDataDialog(QDialog):
 
             if not affected_periods:
                 QMessageBox.information(self, "결과", "조건에 일치하는 비정상 데이터가 없습니다.")
-                cursor.close()
-                conn.close()
+                # cursor.close()
+                # conn.close()
+                self.accept()
                 return
 
             affected_dates = set(row[0] for row in affected_periods)
