@@ -299,12 +299,12 @@ def serial_receive_thread():
                         tr2_buffer.append(res_plc.registers[5])
                         tr3_buffer.append(res_plc.registers[6])
 
-                        if is_first_tr_send or (now_t - last_max_calc_time >= 60.0):
+                        if is_first_tr_send or (now_t - last_max_calc_time >= 120.0):
                             if is_first_tr_send:
                                 # 🌟 프로그램 켜고 처음 진입 시 현재 온도값을 PLC(D0980~D0982)로 즉시 전송
                                 safe_modbus_call(client_plc.write_registers, address=980, values=[max_tr1, max_tr2, max_tr3], slave_id=5)
                             elif tr1_buffer:
-                                # 60주기마다 도달했을 때는 1분간의 최고값 계산 후 전송
+                                # 120주기마다 도달했을 때는 2분간의 최고값 계산 후 전송
                                 max_tr1 = max(tr1_buffer); max_tr2 = max(tr2_buffer); max_tr3 = max(tr3_buffer)
                                 safe_modbus_call(client_plc.write_registers, address=980, values=[max_tr1, max_tr2, max_tr3], slave_id=5)
                                 

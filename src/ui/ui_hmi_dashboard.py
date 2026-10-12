@@ -165,7 +165,7 @@ class HMIDashboardWidget(QWidget):
         grid.setSpacing(2)
         grid.setContentsMargins(5, 5, 5, 5)
 
-        headers = ["설비 구분", "운전 전압 (V)", "운전 전류 (A)", "TR별 부하 (kW)", "부하율 (%)", "총 부하( kW )", "운전 온도 (℃)", "1분 최대온도 (℃)"]
+        headers = ["설비 구분", "운전 전압 (V)", "운전 전류 (A)", "TR별 부하 (kW)", "부하율 (%)", "총 부하( kW )", "운전 온도 (℃)", "2분 최대온도 (℃)"]
         for col, h_text in enumerate(headers):
             lbl = QLabel(h_text); lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet("background-color: #222; font-weight: bold; padding: 5px; border: 1px solid #555;")
