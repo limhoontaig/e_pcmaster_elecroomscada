@@ -81,7 +81,8 @@ class CommSignal(QObject):
     status_changed = pyqtSignal(bool)
     plc_status_update = pyqtSignal(list)
     plc_data_update = pyqtSignal(dict)
-    plc_initial_sync = pyqtSignal(bool, bool)
+    # plc_initial_sync = pyqtSignal(bool, bool)
+    plc_control_sync = pyqtSignal(list)
 
 comm_signal = CommSignal()
 last_db_save_time = 0
@@ -136,7 +137,7 @@ def serial_receive_thread():
     global last_plc_heartbeat_val, last_plc_heartbeat_time
     
     current_status = None
-    is_initial_sync_done = False
+    # is_initial_sync_done = False
     
     try:
         while is_running:
@@ -214,14 +215,25 @@ def serial_receive_thread():
                     if now_t - last_hb_send_time >= 2.0:
                         safe_modbus_call(client_plc.write_register, address=6531, value=1, slave_id=5)
                         last_hb_send_time = now_t
-                    if not is_initial_sync_done:
-                        current_step = "PLC 초기 상태(M100, M101) 읽기"
-                        res_init = safe_modbus_call(client_plc.read_coils, address=160, count=2, slave_id=5)
-                        if res_init and not res_init.isError():
-                            m100_state = res_init.bits[0]
-                            m101_state = res_init.bits[1]
-                            comm_signal.plc_initial_sync.emit(m100_state, m101_state)
-                            is_initial_sync_done = True
+
+                    # ==========================================================
+                    # 🌟 [변경] PLC 제어 영역(M0100 ~ M0117, 주소 160부터 18개 이상) 상시 읽기
+                    # PLC HMI 패널 조작 상태가 파이썬 HMI에 실시간 반영되도록 주기 폴링 수행
+                    # ==========================================================
+                    current_step = "PLC 제어 상태 영역(M0100~) 읽기 및 16진수 비트 정제"
+                    # M0100은 10진수 주소 기준으로 계산할 때, Modbus 주소 매핑에 맞춰 넉넉하게 읽은 뒤 필터링합니다.
+                    res_control = safe_modbus_call(client_plc.read_coils, address=160, count=32, slave_id=5)
+                    
+                    if res_control and not res_control.isError():
+                        clean_control_bits = []
+                        for i, state in enumerate(res_control.bits[:32]):
+                            modbus_addr = 160 + i
+                            bit = modbus_addr % 16
+                            if bit <= 9:
+                                clean_control_bits.append(state)
+                        
+                        # 정제된 제어 비트 배열을 UI로 전달
+                        comm_signal.plc_control_sync.emit(clean_control_bits)
                     
                     if pending_tr_fan_values is not None:
                         current_step = "PLC(국번 5) 온도 설정값 쓰기 (D0900)"

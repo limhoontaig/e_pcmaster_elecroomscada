@@ -211,7 +211,8 @@ class HMIDashboardWidget(QWidget):
 
         main_layout.addWidget(data_frame, 1)
         # 🌟 [신규 추가] 워커에서 쏜 시그널을 내 함수(sync_ui_from_plc)와 연결 (init_ui 맨 마지막 줄에 추가)
-        pcmaster_worker.comm_signal.plc_initial_sync.connect(self.sync_ui_from_plc)
+        # pcmaster_worker.comm_signal.plc_initial_sync.connect(self.sync_ui_from_plc)
+        pcmaster_worker.comm_signal.plc_control_sync.connect(self.sync_control_ui)
 
     def create_ventilation_panel(self):
         frame = QFrame()
@@ -683,6 +684,93 @@ class HMIDashboardWidget(QWidget):
 
         if hasattr(self, 'lbl_ef_temp') and 'indoor_temp' in data:
             self.lbl_ef_temp.setText(f"{float(data['indoor_temp']):.1f} ℃")
+
+    def sync_control_ui(self, control_bits):
+        """
+        PLC에서 정제되어 넘어온 제어 비트 배열을 받아 대시보드 버튼들과 양방향으로 동기화합니다.
+        (마스터 가동 여부, 자동/수동 모드에 따른 버튼 가시성 및 컬러 변화 포함)
+        """
+        if not control_bits or len(control_bits) < 18:
+            return
+
+        try:
+            # 1. TR 냉각 전체 마스터 버튼 동기화 (M0101)
+            # 래더 B접점 특성상 0일 때 마스터 켜짐(True)
+            is_master_on = not control_bits[1]
+            
+            # 현재 대시보드의 마스터 버튼 상태와 다를 때만 연동 메서드 실행
+            if self.btn_master.isChecked() != is_master_on:
+                self.btn_master.blockSignals(True)
+                self.btn_master.setChecked(is_master_on)
+                self.btn_master.setText("전체 냉각설비 가동중" if is_master_on else "❄️ 겨울철 냉각설비 정지")
+                self.btn_master.setStyleSheet(self.get_master_style(is_master_on))
+                self.btn_master.blockSignals(False)
+                
+                # 🌟 마스터 토글 시 하위 버튼들 보이기/숨기기 처리 (기존 대시보드 로직 연동)
+                for btn in [self.btn_auto, self.btn_tr1, self.btn_tr2, self.btn_tr3]:
+                    btn.setVisible(is_master_on)
+                if not is_master_on:
+                    self.set_individual_buttons_enabled(False)
+
+            # 마스터가 꺼져 있다면 하위 상태 동기화는 스킵
+            if not is_master_on:
+                return
+
+            # 2. TR 자동/수동 토글 버튼 동기화 (M0100)
+            # 래더 B접점 특성상 0일 때 자동(True)
+            is_auto = not control_bits[0]
+            
+            if self.btn_auto.isChecked() != is_auto:
+                self.btn_auto.blockSignals(True)
+                self.btn_auto.setChecked(is_auto)
+                self.btn_auto.setText("자동 운전" if is_auto else "수동 운전")
+                self.btn_auto.setStyleSheet(self.get_auto_manual_style(is_auto))
+                self.btn_auto.blockSignals(False)
+                
+                # 🌟 자동/수동 전환 시 개별 수동 버튼 활성화/비활성화 처리 연동
+                self.set_individual_buttons_enabled(not is_auto)
+                if is_auto:
+                    for tr_num in [1, 2, 3]:
+                        tr_btn = getattr(self, f"btn_tr{tr_num}")
+                        tr_btn.blockSignals(True)
+                        tr_btn.setChecked(False)
+                        tr_btn.blockSignals(False)
+
+            # 3. TR 개별 수동 조작 버튼 동기화 (M0102 ~ M0104) 및 자체 버튼 컬러/텍스트 변경
+            for idx, tr_num in enumerate([1, 2, 3], start=2):
+                if idx < len(control_bits):
+                    is_tr_manual_on = bool(control_bits[idx])
+                    btn = getattr(self, f"btn_tr{tr_num}")
+                    
+                    if btn.isChecked() != is_tr_manual_on:
+                        btn.blockSignals(True)
+                        btn.setChecked(is_tr_manual_on)
+                        # 🌟 수동 ON 상태일 때 버튼 텍스트 및 자체 컬러 스타일 반영 (체크되면 QSS의 :checked 스타일에 의해 빨간색+노란글씨로 자동 변환됨)
+                        btn.setText(f"TR-{tr_num} 수동 ON" if is_tr_manual_on else f"TR-{tr_num} 수동 OFF")
+                        btn.blockSignals(False)
+
+            # 4. 배기휀(EF) 수동 기동 토글 스위치 동기화 (M0116)
+            if len(control_bits) > 16 and hasattr(self, 'btn_EF_manual_run'):
+                ef_sw_state = bool(control_bits[16])
+                if self.btn_EF_manual_run.isChecked() != ef_sw_state:
+                    self.btn_EF_manual_run.blockSignals(True)
+                    self.btn_EF_manual_run.setChecked(ef_sw_state)
+                    self.btn_EF_manual_run.setText("수동 운전" if ef_sw_state else "수동 정지")
+                    self.btn_EF_manual_run.setStyleSheet(self.get_toggle_style(ef_sw_state))
+                    self.btn_EF_manual_run.blockSignals(False)
+
+            # 5. 급기휀(SF) 수동 기동 토글 스위치 동기화 (M0117)
+            if len(control_bits) > 17 and hasattr(self, 'btn_SF_manual_run'):
+                sf_sw_state = bool(control_bits[17])
+                if self.btn_SF_manual_run.isChecked() != sf_sw_state:
+                    self.btn_SF_manual_run.blockSignals(True)
+                    self.btn_SF_manual_run.setChecked(sf_sw_state)
+                    self.btn_SF_manual_run.setText("수동 운전" if sf_sw_state else "수동 정지")
+                    self.btn_SF_manual_run.setStyleSheet(self.get_toggle_style(sf_sw_state))
+                    self.btn_SF_manual_run.blockSignals(False)
+
+        except Exception as e:
+            pass
 
     def sync_ui_from_plc(self, m100_state, m101_state):
         """프로그램 시작 시 PLC의 M0100(자동/수동), M0101(마스터) 상태를 읽어와 화면에 동기화"""
