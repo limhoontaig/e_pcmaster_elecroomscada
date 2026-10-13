@@ -1,4 +1,5 @@
 # ui_hmi_dashboard.py
+
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
                              QLabel, QGroupBox, QPushButton, QFrame, QSplitter, 
                              QSizePolicy, QMessageBox)
@@ -10,69 +11,10 @@ from src.tr_controller import TRFanSettingsDialog
 from src.ui.ui_ventilation import VentilationSettingsDialog
 from src.ui.ui_ac_settings import ACSettingsDialog
 
-
-# ==============================================================================
-# 애니메이션 모터 클래스
-# ==============================================================================
-class FanGraphicWidget(QWidget):
-    def __init__(self, parent=None, fan_type="TR"):
-        super().__init__(parent)
-        self.setMinimumSize(120, 110)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding) 
-        self.is_running = False
-        self.angle = 0
-        self.fan_type = fan_type
-        
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_animation)
-
-    def set_fan_state(self, state):
-        self.is_running = state
-        if self.is_running:
-            self.timer.start(150)
-        else:
-            self.timer.stop()
-        self.update()
-
-    def update_animation(self):
-        self.angle = (self.angle + 20) % 360
-        self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        w, h = self.width(), self.height()
-
-        if self.fan_type == "TR":
-            painter.setBrush(QBrush(QColor("#444444"))); painter.setPen(Qt.NoPen)
-            painter.drawRect(10, 40, w - 20, 10); painter.drawRect(10, h - 20, w - 20, 10)
-            coil_w = (w - 40) / 3; coil_h = h - 70
-            painter.setBrush(QBrush(QColor("#900000"))); painter.setPen(QPen(QColor("#111111"), 2))
-            gap = 5; start_x = 10 + gap
-            for i in range(3):
-                painter.drawRoundedRect(int(start_x + (coil_w + gap)*i), 50, int(coil_w), int(coil_h), 4, 4)
-            fan_cy = 20
-        else:
-            painter.setBrush(QBrush(QColor("#7f8c8d"))); painter.setPen(QPen(QColor("#2c3e50"), 3))
-            painter.drawEllipse(int(w/2 - 45), int(h/2 - 45), 90, 90)
-            fan_cy = h / 2
-
-        fan_cx = w / 2
-        fan_radius = 16 if self.fan_type == "TR" else 40
-        
-        if self.fan_type == "TR":
-            painter.setBrush(QBrush(QColor("#111111"))); painter.setPen(QPen(QColor("#7f8c8d"), 2))
-            painter.drawEllipse(int(fan_cx - fan_radius), int(fan_cy - fan_radius), fan_radius*2, fan_radius*2)
-        
-        painter.translate(fan_cx, fan_cy)
-        painter.rotate(self.angle) 
-        
-        painter.setBrush(QBrush(QColor("#3498db" if self.is_running else "#555555"))) 
-        painter.setPen(Qt.NoPen)
-        for _ in range(4): 
-            painter.drawPie(int(-fan_radius*0.8), int(-fan_radius*0.8), int(fan_radius*1.6), int(fan_radius*1.6), 0 * 16, 40 * 16)
-            painter.rotate(90)
-        painter.resetTransform()
+# 🌟 분리된 위젯 및 패널 클래스들 임포트
+from src.ui.fan_graphic import FanGraphicWidget
+from src.ui.ventilation_panel import VentilationPanel
+from src.ui.transformer_panel import TransformerPanel
 
 
 # ==============================================================================
@@ -111,7 +53,6 @@ class HMIDashboardWidget(QWidget):
             "SF_trip_reset": 114,        
         }
 
-        # 👇 여기에 수동 모드 상태를 기록할 변수 두 줄을 추가합니다.
         self.is_ef_manual = False
         self.is_sf_manual = False
         
@@ -122,7 +63,6 @@ class HMIDashboardWidget(QWidget):
         title_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #00FFCC;")
         top_layout.addWidget(title_label); top_layout.addStretch()
 
-        # 👇 3개의 셋팅 버튼 생성 및 스타일 적용
         btn_style = """
             QPushButton { background-color: #34495e; color: white; font-weight: bold; padding: 5px 15px; border-radius: 4px; border: 1px solid #2c3e50; }
             QPushButton:hover { background-color: #2c3e50; border: 1px solid #1abc9c; }
@@ -135,7 +75,6 @@ class HMIDashboardWidget(QWidget):
         btn_vent.setStyleSheet(btn_style)
         btn_tr.setStyleSheet(btn_style)
         
-        # 버튼을 함수와 연결
         btn_ac.clicked.connect(self.open_ac_settings_dialog)
         btn_vent.clicked.connect(self.open_ventilation_settings_dialog)
         btn_tr.clicked.connect(self.open_tr_settings_dialog)
@@ -146,11 +85,17 @@ class HMIDashboardWidget(QWidget):
 
         main_layout.addLayout(top_layout)
 
+        # ======================================================================
+        # 🌟 환기 및 변압기 패널을 분리된 클래스로 호출하여 배치
+        # ======================================================================
         mid_layout = QHBoxLayout()
         mid_layout.setContentsMargins(0, 5, 0, 5)
         
-        vent_panel = self.create_ventilation_panel()
-        tr_panel = self.create_transformer_panel()
+        vent_panel = VentilationPanel(self)
+        tr_panel = TransformerPanel(self)
+        
+        self.sf_graphic = vent_panel.sf_graphic
+        self.ef_graphic = vent_panel.ef_graphic
         
         vent_panel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         tr_panel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
@@ -159,6 +104,7 @@ class HMIDashboardWidget(QWidget):
 
         main_layout.addLayout(mid_layout, 2) 
 
+        # 하단 계측 데이터 테이블 그리드 영역
         data_frame = QFrame()
         data_frame.setStyleSheet("background-color: #0a0a0a; border: 2px solid #444;")
         grid = QGridLayout(data_frame)
@@ -184,7 +130,6 @@ class HMIDashboardWidget(QWidget):
             r_lbl.setStyleSheet("background-color: #1a1a1a; font-weight: bold; padding: 5px; border: 1px solid #444;")
             grid.addWidget(r_lbl, row_idx, 0)
             
-            # 전압, 전류, 전력, 부하율 컬럼 배치
             for col_idx in range(4):
                 key = keys[col_idx]
                 db_key = db_keys[col_idx]
@@ -194,13 +139,11 @@ class HMIDashboardWidget(QWidget):
                 self.data_labels[label_key] = lcd
                 grid.addWidget(lcd, row_idx, col_idx + 1)
 
-            # 🌟 운전전력 총합계 (TR-1 행 위치에 3개 행 병합으로 배치, 데이터 키는 'total_kw')
             if row_idx == 1:
                 total_lcd = self.create_lcd_label("0.0", "#f39c12")
                 self.data_labels["total_kw"] = total_lcd
                 grid.addWidget(total_lcd, 1, 5, 3, 1)
 
-            # 운전 온도 및 1분간 최대온도 배치
             temp_lcd = self.create_lcd_label("0.0", "#2ecc71")
             self.data_labels[f"{db_prefix}_Temp"] = temp_lcd
             grid.addWidget(temp_lcd, row_idx, 6)
@@ -210,151 +153,7 @@ class HMIDashboardWidget(QWidget):
             grid.addWidget(max_temp_lcd, row_idx, 7)
 
         main_layout.addWidget(data_frame, 1)
-        # 🌟 [신규 추가] 워커에서 쏜 시그널을 내 함수(sync_ui_from_plc)와 연결 (init_ui 맨 마지막 줄에 추가)
-        # pcmaster_worker.comm_signal.plc_initial_sync.connect(self.sync_ui_from_plc)
         pcmaster_worker.comm_signal.plc_control_sync.connect(self.sync_control_ui)
-
-    def create_ventilation_panel(self):
-        frame = QFrame()
-        frame.setStyleSheet("QFrame { background-color: #111111; border: 1px solid #333; }")
-        layout = QVBoxLayout(frame)
-        
-        lbl_title = QLabel("<h3 style='color:#f39c12; margin:0;'>💨 환기설비 (SF/EF) 현황 및 제어</h3>")
-        lbl_title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        lbl_title.setAlignment(Qt.AlignCenter)
-        lbl_title.mouseDoubleClickEvent = self.open_ventilation_settings_dialog
-        layout.addWidget(lbl_title)
-
-        equip_layout = QHBoxLayout()
-        self.sf_graphic, sf_ctrl = self.create_fan_control_unit("급기휀 (SF)", "SF")
-        equip_layout.addLayout(sf_ctrl)
-        
-        self.ef_graphic, ef_ctrl = self.create_fan_control_unit("배기휀 (EF)", "EF")
-        equip_layout.addLayout(ef_ctrl)
-
-        layout.addLayout(equip_layout)
-        return frame
-
-    def create_fan_control_unit(self, title, prefix):
-        vbox = QVBoxLayout()
-        group = QGroupBox(title)
-        group.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; border: 1px solid #555; margin-top: 10px;} QGroupBox::title { subcontrol-origin: margin; left: 10px; }")
-        glayout = QVBoxLayout(group)
-        glayout.setSpacing(12) 
-
-        top_fan_layout = QHBoxLayout()
-        top_fan_layout.setSpacing(8)
-
-        # 1. 휀 애니메이션
-        fan_graphic = FanGraphicWidget(fan_type="VENT")
-        top_fan_layout.addWidget(fan_graphic, 1)
-
-        # 2. 대형 디지털 온도 표시 박스
-        temp_box = QFrame()
-        temp_box.setStyleSheet("background-color: #080d14; border: 1px solid #2c3e50; border-radius: 6px;")
-        temp_layout = QVBoxLayout(temp_box)
-        temp_layout.setContentsMargins(6, 8, 6, 8)
-        temp_layout.setSpacing(2)
-
-        # SF는 외기(하늘색), EF는 실내(에메랄드 녹색) 테마
-        is_sf = (prefix == "SF")
-        temp_name = "외기 온도" if is_sf else "실내 온도"
-        temp_color = "#00e5ff" if is_sf else "#2ecc71"
-
-        lbl_t_title = QLabel(f"<b>{temp_name}</b>")
-        lbl_t_title.setAlignment(Qt.AlignCenter)
-        lbl_t_title.setStyleSheet("color: #95a5a6; font-size: 13px; border: none;")
-
-        lbl_t_val = QLabel("--.- ℃")
-        lbl_t_val.setAlignment(Qt.AlignCenter)
-        lbl_t_val.setStyleSheet(f"""
-            QLabel {{
-                color: {temp_color};
-                font-family: 'Consolas', '맑은 고딕', sans-serif;
-                font-size: 26px;
-                font-weight: bold;
-                border: none;
-            }}
-        """)
-        
-        # 외부에서 갱신할 수 있도록 객체 변수로 저장 (self.lbl_sf_temp, self.lbl_ef_temp)
-        setattr(self, f"lbl_{prefix.lower()}_temp", lbl_t_val)
-
-        temp_layout.addWidget(lbl_t_title)
-        temp_layout.addWidget(lbl_t_val)
-        top_fan_layout.addWidget(temp_box, 1)
-
-        glayout.addLayout(top_fan_layout, 1)
-
-        lamp_layout = QHBoxLayout()
-        
-        run_lamp = QPushButton("정지중")
-        run_lamp.setCursor(QCursor(Qt.PointingHandCursor))
-        run_lamp.setFixedHeight(40)
-        run_lamp.setStyleSheet("background-color: #555; color: white; padding: 5px; font-weight: bold; border-radius: 3px; border: 1px solid #222;")
-        run_lamp.clicked.connect(lambda: self.on_system_stop_clicked(prefix))
-        
-        trip_lamp = QPushButton("정상")
-        trip_lamp.setCursor(QCursor(Qt.PointingHandCursor))
-        trip_lamp.setFixedHeight(40)
-        trip_lamp.setStyleSheet("background-color: #27ae60; color: white; padding: 5px; font-weight: bold; border-radius: 3px; border: 1px solid #222;")
-        trip_lamp.clicked.connect(lambda: self.on_thermal_reset_clicked(prefix))
-        
-        setattr(self, f"lbl_{prefix}_run", run_lamp)
-        setattr(self, f"lbl_{prefix}_trip", trip_lamp)
-        
-        lamp_layout.addWidget(run_lamp)
-        lamp_layout.addWidget(trip_lamp)
-        glayout.addLayout(lamp_layout, 0)
-
-        ctrl_lbl = QLabel("<b>[제어 스위치]</b>")
-        ctrl_lbl.setFixedHeight(40)
-        ctrl_lbl.setAlignment(Qt.AlignCenter)
-        glayout.addWidget(ctrl_lbl)
-        
-        btn_layout = QGridLayout()
-        btn_layout.setHorizontalSpacing(8)
-        btn_layout.setVerticalSpacing(8)
-        
-        btn_layout.setColumnStretch(0, 1)
-        btn_layout.setColumnStretch(1, 1)
-        btn_layout.setColumnStretch(2, 1)
-        
-        btn_remote = self.create_momentary_button("방재실", f"{prefix}_op_room_start")
-        btn_auto = self.create_momentary_button("현장 자동", f"{prefix}_local_auto_start")
-        btn_manual = self.create_momentary_button("현장 수동", f"{prefix}_local_manual_start")
-        btn_stop = self.create_momentary_button("정   지", f"{prefix}_stop", color_type="danger")
-
-        btn_manual_run = QPushButton("수동 기동")
-        btn_manual_run.setCheckable(True)
-        
-        btn_remote.setFixedHeight(40)
-        btn_auto.setFixedHeight(40)
-        btn_manual.setFixedHeight(40)
-        btn_stop.setFixedHeight(40)
-        btn_manual_run.setFixedHeight(40)
-
-        btn_manual_run.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        btn_manual_run.setStyleSheet(self.get_toggle_style(False))
-        btn_manual_run.clicked.connect(lambda checked, p=prefix: self.on_manual_run_toggled(p, checked))
-
-        btn_layout.addWidget(btn_remote, 0, 0)
-        btn_layout.addWidget(btn_auto, 0, 1)
-        btn_layout.addWidget(btn_manual, 0, 2)
-        
-        btn_layout.addWidget(btn_stop, 1, 0, 1, 2) 
-        btn_layout.addWidget(btn_manual_run, 1, 2) 
-
-        setattr(self, f"btn_{prefix}_remote", btn_remote)
-        setattr(self, f"btn_{prefix}_auto", btn_auto)
-        setattr(self, f"btn_{prefix}_manual", btn_manual)
-        setattr(self, f"btn_{prefix}_stop", btn_stop)
-        setattr(self, f"btn_{prefix}_manual_run", btn_manual_run) 
-        
-        glayout.addLayout(btn_layout, 0)
-        vbox.addWidget(group)
-        
-        return fan_graphic, vbox
 
     def get_toggle_style(self, is_on):
         if is_on:
@@ -428,103 +227,6 @@ class HMIDashboardWidget(QWidget):
         addr = self.plc_addresses.get(signal_name)
         if addr is not None:
             self.safe_write_bit(addr, True, f"{signal_name} 단일 펄스")
-
-    # ==========================================================================
-    # [우측] 변압기(TR) 패널 생성부 
-    # ==========================================================================
-    def create_transformer_panel(self):
-        frame = QFrame()
-        frame.setStyleSheet("QFrame { background-color: #111111; border: 1px solid #333; }")
-        layout = QVBoxLayout(frame)
-        
-        lbl_title = QLabel("<h3 style='color:#3498db; margin:0;'>⚡ 변압기(TR) 현황 및 휀 제어</h3>")
-        lbl_title.setAlignment(Qt.AlignCenter)
-        lbl_title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        lbl_title.mouseDoubleClickEvent = self.open_tr_settings_dialog
-        layout.addWidget(lbl_title)
-
-        # 1. TR 그래픽 및 가동상태 (TR1, TR2, TR3)
-        tr_layout = QHBoxLayout()
-        self.tr1_graphic, self.lbl_tr1_status = self.create_tr_panel("TR-1", tr_layout)
-        self.tr2_graphic, self.lbl_tr2_status = self.create_tr_panel("TR-2", tr_layout)
-        self.tr3_graphic, self.lbl_tr3_status = self.create_tr_panel("TR-3", tr_layout)
-        layout.addLayout(tr_layout, 1) 
-
-        # 2. 통합 제어 스위치 영역
-        ctrl_lbl = QLabel("<b>[제어 스위치]</b>")
-        ctrl_lbl.setFixedHeight(40)
-        ctrl_lbl.setAlignment(Qt.AlignCenter)
-        layout.addWidget(ctrl_lbl, 0)
-
-        ctrl_layout = QGridLayout()
-        ctrl_layout.setSpacing(8)
-        ctrl_layout.setColumnStretch(0, 1)
-        ctrl_layout.setColumnStretch(1, 1)
-        ctrl_layout.setColumnStretch(2, 1)
-        
-        self.btn_master = QPushButton("전체 냉각설비 가동중")
-        self.btn_master.setCheckable(True); self.btn_master.setChecked(True)
-        self.btn_master.setStyleSheet(self.get_master_style(True))
-        self.btn_master.setFixedHeight(40) # 환기설비와 통일
-        self.btn_master.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.btn_master.clicked.connect(self.on_master_toggled)
-
-        self.btn_auto = QPushButton("자동 운전")
-        self.btn_auto.setCheckable(True); self.btn_auto.setChecked(True)
-        self.btn_auto.setStyleSheet(self.get_auto_manual_style(True))
-        self.btn_auto.setFixedHeight(40) # 환기설비와 통일
-        self.btn_auto.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.btn_auto.clicked.connect(self.on_auto_manual_toggled)
-
-        self.btn_tr1 = self.create_toggle_button("TR-1 수동 OFF")
-        self.btn_tr2 = self.create_toggle_button("TR-2 수동 OFF")
-        self.btn_tr3 = self.create_toggle_button("TR-3 수동 OFF")
-        self.btn_tr1.setFixedHeight(40) # 환기설비와 통일
-        self.btn_tr2.setFixedHeight(40)
-        self.btn_tr3.setFixedHeight(40)
-
-        # 1행: 마스터, 자동 버튼
-        ctrl_layout.addWidget(self.btn_master, 0, 0, 1, 2)
-        ctrl_layout.addWidget(self.btn_auto, 0, 2, 1, 1)
-        
-        # 2행: TR별 수동 버튼
-        ctrl_layout.addWidget(self.btn_tr1, 1, 0)
-        ctrl_layout.addWidget(self.btn_tr2, 1, 1)
-        ctrl_layout.addWidget(self.btn_tr3, 1, 2)
-
-        layout.addLayout(ctrl_layout, 0)
-
-        self.btn_tr1.toggled.connect(lambda checked: self.update_tr_fan_status(1, checked))
-        self.btn_tr2.toggled.connect(lambda checked: self.update_tr_fan_status(2, checked))
-        self.btn_tr3.toggled.connect(lambda checked: self.update_tr_fan_status(3, checked))
-
-        for btn in [self.btn_auto, self.btn_tr1, self.btn_tr2, self.btn_tr3]:
-            sp = btn.sizePolicy()
-            sp.setRetainSizeWhenHidden(True)
-            btn.setSizePolicy(sp)
-
-        self.set_individual_buttons_enabled(False) 
-        
-        return frame
-
-    def create_tr_panel(self, title, parent_layout):
-        group = QGroupBox(title)
-        group.setStyleSheet("QGroupBox { border: 1px solid #555; margin-top: 10px; font-weight: bold; } QGroupBox::title { subcontrol-origin: margin; left: 10px; }")
-        
-        layout = QVBoxLayout(group)
-        layout.setSpacing(12) 
-        
-        graphic_widget = FanGraphicWidget(fan_type="TR")
-        layout.addWidget(graphic_widget, 1)
-
-        status_lbl = QLabel("정지중")
-        status_lbl.setAlignment(Qt.AlignCenter)
-        status_lbl.setFixedHeight(40) 
-        status_lbl.setStyleSheet("background-color: #555; color: white; padding: 5px; font-weight: bold;")
-        layout.addWidget(status_lbl, 0)
-        
-        parent_layout.addWidget(group)
-        return graphic_widget, status_lbl
 
     def get_master_style(self, is_on):
         if is_on:
