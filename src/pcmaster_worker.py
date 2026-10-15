@@ -272,8 +272,8 @@ def serial_receive_thread():
                         
                         수집데이터[0]  = res_plc.registers[0] / 10.0
                         수집데이터[1]  = res_plc.registers[1] / 10.0
-                        수집데이터[49] = res_plc.registers[2] / 10.0
-                        수집데이터[50] = res_plc.registers[3] / 10.0
+                        수집데이터[2] = res_plc.registers[2] / 10.0
+                        수집데이터[3] = res_plc.registers[3] / 10.0
 
                         current_tr1 = res_plc.registers[4]
                         current_tr2 = res_plc.registers[5]
@@ -366,8 +366,8 @@ def serial_receive_thread():
                         ac_manager.check_and_control(
                             indoor_temp=수집데이터[0],      
                             outdoor_temp=수집데이터[1], 
-                            dis_temp1=수집데이터[49], 
-                            dis_temp2=수집데이터[50], 
+                            dis_temp1=수집데이터[2], 
+                            dis_temp2=수집데이터[3], 
                             total_load=수집데이터[14]       
                         )
                         safe_modbus_call(client_plc.write_registers, address=957, values=[ac_manager.ac1_cmd, ac_manager.ac2_cmd], slave_id=5)
