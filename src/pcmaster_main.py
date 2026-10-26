@@ -24,12 +24,6 @@ from src.tr_controller import TRFanSettingsDialog
 from src.ui.ui_main_window import SCADAWindow
 from src.ui.ui_ventilation import VentilationSettingsDialog
 
-# 현재 파일(pcmaster_main.py)의 상위 폴더(프로젝트 루트)를 모듈 검색 경로에 추가
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 def center_window(widget):
     """위젯을 화면 중앙으로 이동시키는 함수"""
     qr = widget.frameGeometry()
