@@ -270,14 +270,14 @@ def serial_receive_thread():
                     if res_plc and not res_plc.isError():
                         통신성공_여부 = True
                         
-                        수집데이터[0]  = res_plc.registers[0] / 10.0
-                        수집데이터[1]  = res_plc.registers[1] / 10.0
-                        수집데이터[2] = res_plc.registers[2] / 10.0
-                        수집데이터[3] = res_plc.registers[3] / 10.0
+                        수집데이터[0]  = to_int16(res_plc.registers[0]) / 10.0
+                        수집데이터[1]  = to_int16(res_plc.registers[1]) / 10.0
+                        수집데이터[2] = to_int16(res_plc.registers[2]) / 10.0
+                        수집데이터[3] = to_int16(res_plc.registers[3]) / 10.0
 
-                        current_tr1 = res_plc.registers[4]
-                        current_tr2 = res_plc.registers[5]
-                        current_tr3 = res_plc.registers[6]
+                        current_tr1 = to_int16(res_plc.registers[4])
+                        current_tr2 = to_int16(res_plc.registers[5])
+                        current_tr3 = to_int16(res_plc.registers[6])
 
                         current_step = "PLC(국번 5) 스마트 환기 제어 판별 및 쓰기"
                         if vent_settings is not None:
@@ -399,6 +399,11 @@ def serial_receive_thread():
     finally:
         if client_relay: client_relay.close()
         if client_plc: client_plc.close()
+
+def to_int16(val):
+  """16비트 unsigned 정수를 부호 있는 signed int16(-32768 ~ 32767)으로 변환"""
+  val = int(val) & 0xFFFF
+  return val - 0x10000 if val >= 0x8000 else val
 
 def insert_raw_data(values):
     if len(values) < len(DATA_LABELS): return
